@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-03-29
+
+### Added
+- `STARTUP_DELAY_SECONDS` env var (default `15`) — sleep before the first
+  scrape cycle to allow the container network to stabilize, preventing
+  `ERR_NETWORK_CHANGED` errors at boot
+
 ## [0.1.4] - 2026-03-29
 
 ### Added

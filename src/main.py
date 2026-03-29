@@ -167,11 +167,17 @@ def main() -> None:
     run_once_flag = _get_env_bool("RUN_ONCE")
     scraper_cfg = _load_scraper_config()
 
+    startup_delay = _get_env_int("STARTUP_DELAY_SECONDS", 15)
+
     if dry_run:
         logger.info("=== DRY RUN MODE — no DB writes or notifications ===")
 
     db = Database(db_path)
     notifier = DiscordNotifier(webhook_url)
+
+    if startup_delay > 0:
+        logger.info("Startup delay: waiting %ds for network to stabilize", startup_delay)
+        time.sleep(startup_delay)
 
     while True:
 
