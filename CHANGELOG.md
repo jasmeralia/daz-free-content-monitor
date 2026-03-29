@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-03-29
+
+### Added
+- `scripts/query_sku.py` — CLI to inspect DB state for a product by URL or SKU slug,
+  showing all columns from `free_items` and `owned_skus` in a human-readable format
+
 ## [0.1.1] - 2026-03-29
 
 ### Added
@@ -46,6 +52,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitHub Actions CI: lint on every `master` push; lint + test + Docker build/push on `v*` tags
 - Docker image based on `mcr.microsoft.com/playwright/python:v1.44.0-jammy`
 
-[Unreleased]: https://github.com/jasmeralia/daz-free-content-monitor/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/jasmeralia/daz-free-content-monitor/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/jasmeralia/daz-free-content-monitor/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/jasmeralia/daz-free-content-monitor/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/jasmeralia/daz-free-content-monitor/releases/tag/v0.1.0
