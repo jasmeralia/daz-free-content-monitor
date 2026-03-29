@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-03-29
+
+### Fixed
+- `ImportError: cannot import name 'UTC' from 'datetime'` on Python 3.10 (Docker runtime);
+  replaced `datetime.UTC` with `timezone.utc` in `src/db.py` and `src/notifier.py`
+
+### Changed
+- `pyproject.toml` ruff and mypy `target-version`/`python_version` corrected to `3.10`
+  to match the Docker base image and prevent future 3.11+ syntax from being auto-suggested
+
 ## [0.1.2] - 2026-03-29
 
 ### Added
@@ -52,7 +62,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitHub Actions CI: lint on every `master` push; lint + test + Docker build/push on `v*` tags
 - Docker image based on `mcr.microsoft.com/playwright/python:v1.44.0-jammy`
 
-[Unreleased]: https://github.com/jasmeralia/daz-free-content-monitor/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/jasmeralia/daz-free-content-monitor/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/jasmeralia/daz-free-content-monitor/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/jasmeralia/daz-free-content-monitor/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/jasmeralia/daz-free-content-monitor/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/jasmeralia/daz-free-content-monitor/releases/tag/v0.1.0
