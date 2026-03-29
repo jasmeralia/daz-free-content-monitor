@@ -10,9 +10,29 @@ notifications with direct links to new free items.
 
 1. After any change in the repository, run `make lint` and `make test`.
 2. Any errors or warnings must be resolved before proceeding.
-3. Update the version and run `make lint` again.
-4. Add a new entry in CHANGELOG.md, and commit and push to both the 
-master branch and a new tag specific to that version.
+3. Update the version (patch/Z only — see Versioning Rules) and run `make lint` again.
+4. Add a new entry in CHANGELOG.md, and commit and push to both the
+   master branch and a new tag specific to that version.
+
+## Versioning Rules
+
+- Version format is `X.Y.Z` (semver). Only the patch number (Z) may be bumped
+  without explicit human approval. Bumping X (major) or Y (minor) requires the
+  user to approve first — ask if you believe a bump is warranted.
+- **Never modify or move a tag after it has been created.** Tags are immutable.
+  If a release needs a fix, create a new version and a new tag.
+
+## Timezone Behavior
+
+- All timestamps (DB storage, Discord notifications, log output) use the
+  timezone configured via the `DISPLAY_TIMEZONE` environment variable.
+- Default: `America/Los_Angeles`. Valid values are IANA timezone names
+  (e.g. `America/New_York`, `Europe/London`, `UTC`).
+- The helper `src/config.py:get_display_tz()` reads this env var and falls
+  back to the default for missing or invalid values.
+- Do **not** hardcode `timezone.utc` or `datetime.UTC` anywhere; always call
+  `get_display_tz()`. The only exception is if UTC is explicitly required for
+  interoperability with an external system (document the reason in a comment).
 
 ## Architecture
 
@@ -44,9 +64,11 @@ daz-monitor/
 ├── requirements.txt      # modules actually required to run the app
 ├── requirements-dev.txt  # dev tools: ruff, mypy, pylint, includes requirements.txt
 ├── scripts/
-│   └── mark_owned.py     # mark items as owned by URL or SKU slug
+│   ├── mark_owned.py     # mark items as owned by URL or SKU slug
+│   └── query_sku.py      # inspect DB state for a product by URL or SKU slug
 └── src/
     ├── main.py           # entrypoint, scheduler loop
+    ├── config.py         # env-var config helpers (timezone, etc.)
     ├── scraper.py        # Playwright-based DAZ store scraper
     ├── db.py             # SQLite schema and queries
     └── notifier.py       # Discord webhook sender
@@ -169,6 +191,7 @@ services:
       - PYTHONUNBUFFERED=1
       - DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
       - CHECK_INTERVAL_SECONDS=3600
+      - DISPLAY_TIMEZONE=America/Los_Angeles
 ```
 
 ## scripts/mark_owned.py

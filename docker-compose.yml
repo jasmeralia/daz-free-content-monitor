@@ -17,6 +17,7 @@ services:
       DB_PATH: "/app/data/daz_monitor.db"
       LOG_FILE: "/app/data/daz_monitor.log"
       LOG_LEVEL: "INFO"
+      DISPLAY_TIMEZONE: "America/Los_Angeles"
       # PAGE_DELAY_MIN: "2.0"
       # PAGE_DELAY_MAX: "5.0"
       # PAGE_TIMEOUT_MS: "30000"

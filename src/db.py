@@ -2,9 +2,10 @@ import logging
 import sqlite3
 from collections.abc import Generator
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
+from .config import get_display_tz
 from .scraper import FreeItem
 
 logger = logging.getLogger(__name__)
@@ -29,7 +30,7 @@ CREATE TABLE IF NOT EXISTS owned_skus (
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(get_display_tz()).isoformat()
 
 
 class Database:

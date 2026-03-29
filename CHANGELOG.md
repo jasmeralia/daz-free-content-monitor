@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-03-29
+
+### Added
+- `src/config.py` — `get_display_tz()` helper; reads `DISPLAY_TIMEZONE` env var
+  (IANA zone name, default `America/Los_Angeles`) and falls back to default on
+  invalid input
+- `DISPLAY_TIMEZONE` env var wired into `docker-compose.yml` (default
+  `America/Los_Angeles`)
+- `tzdata==2025.2` added to `requirements.txt` to ensure timezone data is
+  available in all Docker base images
+
+### Changed
+- All timestamps (`free_items`, `owned_skus`, Discord embed footer) now use the
+  configured display timezone instead of UTC
+- Discord embed footer timezone abbreviation is now dynamic (`%Z`) rather than
+  the hardcoded string `"UTC"`
+
 ## [0.1.3] - 2026-03-29
 
 ### Fixed
@@ -62,7 +79,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitHub Actions CI: lint on every `master` push; lint + test + Docker build/push on `v*` tags
 - Docker image based on `mcr.microsoft.com/playwright/python:v1.44.0-jammy`
 
-[Unreleased]: https://github.com/jasmeralia/daz-free-content-monitor/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/jasmeralia/daz-free-content-monitor/compare/v0.1.4...HEAD
+[0.1.4]: https://github.com/jasmeralia/daz-free-content-monitor/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/jasmeralia/daz-free-content-monitor/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/jasmeralia/daz-free-content-monitor/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/jasmeralia/daz-free-content-monitor/compare/v0.1.0...v0.1.1

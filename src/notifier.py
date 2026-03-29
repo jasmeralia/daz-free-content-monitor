@@ -3,8 +3,9 @@ import logging
 import time
 import urllib.error
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime
 
+from .config import get_display_tz
 from .scraper import FreeItem
 
 logger = logging.getLogger(__name__)
@@ -66,7 +67,9 @@ class DiscordNotifier:
             "title": "\U0001f195 New Free DAZ Item",
             "description": f"**{item.title}**\n{item.url}",
             "color": EMBED_COLOR,
-            "footer": {"text": datetime.now(timezone.utc).strftime("Detected: %Y-%m-%d %H:%M UTC")},
+            "footer": {
+                "text": datetime.now(get_display_tz()).strftime("Detected: %Y-%m-%d %H:%M %Z")
+            },
         }
 
     def send(self, items: list[FreeItem]) -> bool:
