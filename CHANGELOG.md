@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-03-29
+
+### Added
+- `scripts/mark_owned.py` — CLI to mark DAZ products as owned by URL or SKU slug,
+  permanently suppressing future notifications for that item
+- `docs/mark_owned.md` — usage guide for the new script
+- Notification retry: failed Discord deliveries are retried every poll cycle
+  until successful; failures are logged with SKU list for investigation
+
+### Changed
+- Notification tracking redesigned: `seen_items` replaced by `free_items` with
+  `is_active` and `notified_at` columns
+  - Items that disappear from the free list and later reappear now trigger a
+    new notification (previously silenced forever after first notify)
+  - `notified_at` is reset to `NULL` on reactivation so the item re-queues
+- `Database.sync_free_items()` replaces `insert_seen_item` / `get_seen_skus`;
+  performs the full upsert + deactivate in one atomic call
+- `Database.get_pending_notifications()` and `Database.mark_notified()` added
+  to manage per-item delivery state
+- Automatic schema migration from v0.1.0 `seen_items` on first startup
+  (existing seen items are imported as already-notified — no re-notification flood)
+
+### Removed
+- `scripts/import_orders.py` and `docs/export_orders.md` (DAZ does not offer
+  a CSV order export)
+
 ## [0.1.0] - 2026-03-29
 
 ### Added
@@ -20,5 +46,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitHub Actions CI: lint on every `master` push; lint + test + Docker build/push on `v*` tags
 - Docker image based on `mcr.microsoft.com/playwright/python:v1.44.0-jammy`
 
-[Unreleased]: https://github.com/jasmeralia/daz-free-content-monitor/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/jasmeralia/daz-free-content-monitor/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/jasmeralia/daz-free-content-monitor/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/jasmeralia/daz-free-content-monitor/releases/tag/v0.1.0

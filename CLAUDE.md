@@ -37,14 +37,14 @@ daz-monitor/
 ├── docker-compose.yml
 ├── Dockerfile
 ├── docs/
-│   └── export_orders.md  # guide on how to export order CSV
+│   └── mark_owned.md     # guide on marking items as owned
 ├── LICENSE               # MIT License
 ├── Makefile
 ├── README.md
 ├── requirements.txt      # modules actually required to run the app
 ├── requirements-dev.txt  # dev tools: ruff, mypy, pylint, includes requirements.txt
 ├── scripts/
-│   └── import_orders.py  # one-shot CSV import for owned items
+│   └── mark_owned.py     # mark items as owned by URL or SKU slug
 └── src/
     ├── main.py           # entrypoint, scheduler loop
     ├── scraper.py        # Playwright-based DAZ store scraper
@@ -55,15 +55,19 @@ daz-monitor/
 ## SQLite Schema
 
 ```sql
--- Products seen on the free listing (deduplication)
-CREATE TABLE IF NOT EXISTS seen_items (
+-- Active/inactive free listing tracker (replaces simple seen_items)
+-- notified_at NULL = pending delivery; timestamp = successfully delivered
+CREATE TABLE IF NOT EXISTS free_items (
     sku         TEXT PRIMARY KEY,
     title       TEXT NOT NULL,
     url         TEXT NOT NULL,
-    first_seen  TEXT NOT NULL       -- ISO8601
+    first_seen  TEXT NOT NULL,      -- ISO8601, when first seen as free
+    last_seen   TEXT NOT NULL,      -- ISO8601, last time seen on free list
+    is_active   INTEGER NOT NULL DEFAULT 1,  -- 1 = currently on free list
+    notified_at TEXT                -- NULL until Discord delivery succeeds
 );
 
--- Items you already own (seeded from CSV, kept up to date incrementally)
+-- Items you already own — permanently suppress all notifications
 CREATE TABLE IF NOT EXISTS owned_skus (
     sku         TEXT PRIMARY KEY,
     title       TEXT,
@@ -83,34 +87,48 @@ Target URL: `https://www.daz3d.com/free-3d-models`
   - Title
   - Product URL
   - Price confirmation (assert "FREE" / "$0.00" to avoid false positives)
-- Stop paginating when a page returns no products or a page already fully
-  seen in `seen_items`
+- Stop paginating when a page returns no products or a page is entirely
+  composed of owned SKUs (early-exit optimization)
 
-### Owned Items (Optional / Phase 2)
+### Owned Items
 
-- DAZ lets you export order history from your account page
-- `scripts/import_orders.py` reads the CSV and populates `owned_skus`
-- Run manually when you want to refresh the owned list
-- New free items auto-added via the monitor are appended to `owned_skus`
-  after notification so they won't re-notify
+- No CSV export exists on DAZ's site
+- Use `scripts/mark_owned.py` to manually mark items as owned by URL or SKU
+- Items in `owned_skus` are permanently suppressed — never notified about them
 
 ## Main Loop (src/main.py)
 
 ```
 on startup:
-  init db
-  load owned SKUs into memory set
+  init db (runs schema migration from v0.1.0 if needed)
 
 every CHECK_INTERVAL_SECONDS:
-  fetch all current free items from store
-  for each item:
-    if sku in owned_skus → skip
-    if sku in seen_items → skip
+  owned_skus = db.get_owned_skus()
+  result = scraper.scrape_with_retry(owned_skus)   # paginate free listings
+
+  db.sync_free_items(result.items)
+    → upsert all current items as is_active=1
+    → reset notified_at=NULL for items that were inactive (reactivated)
+    → set is_active=0 for items no longer on the free list
+
+  pending = db.get_pending_notifications(owned_skus)
+    → active items with notified_at IS NULL, excluding owned_skus
+
+  for each batch of ≤10 pending items:
+    ok = notifier.send(batch)
+    if ok:
+      db.mark_notified(sku) for each item in batch
     else:
-      insert into seen_items
-      send Discord notification
-      (optional) insert into owned_skus so it doesn't re-notify
+      log error with SKU list — retry next cycle
 ```
+
+**Notification guarantees:**
+- Item appears → notified ✓
+- Item stays on list next cycle → no duplicate ✓
+- Item removed → marked inactive ✓
+- Item reappears later → notified again ✓ (reset on reactivation)
+- Discord delivery failure → retried every cycle until success ✓
+- Item in owned_skus → never notified ✓
 
 ## Discord Notification Format
 
@@ -121,13 +139,10 @@ Each new free item gets an embed:
 
 **[Product Title]**
 https://www.daz3d.com/...
-
-React with ✅ once added to your library.
 ```
 
-Batch multiple new items into a single webhook call if several appear at once
-(Discord allows up to 10 embeds per message). Use a delay between Discord posts
-to prevent rate limiting.
+Up to 10 embeds are batched per webhook call. Rate-limit (429) responses are
+retried with the `retry_after` delay. Failed batches are retried each poll cycle.
 
 ## Dockerfile Notes
 
@@ -156,17 +171,21 @@ services:
       - CHECK_INTERVAL_SECONDS=3600
 ```
 
-## scripts/import_orders.py
+## scripts/mark_owned.py
 
-Accepts the DAZ order history CSV export and upserts into `owned_skus`.
-DAZ CSV columns vary but typically include Order #, Product Name, SKU/Item #,
-Date. Map accordingly.
+Marks one or more DAZ products as owned, permanently suppressing notifications.
+Accepts DAZ product URLs or SKU slugs as positional arguments.
 
 Usage:
 ```
-docker compose run --rm daz-monitor python scripts/import_orders.py \
-  --csv /app/data/daz_orders.csv
+docker compose run --rm daz-monitor python scripts/mark_owned.py \
+  https://www.daz3d.com/genesis-9-starter-essentials
+
+docker compose run --rm daz-monitor python scripts/mark_owned.py \
+  some-product-slug another-product-slug
 ```
+
+See `docs/mark_owned.md` for full details.
 
 ## Known Risks / Mitigations
 
@@ -174,8 +193,7 @@ docker compose run --rm daz-monitor python scripts/import_orders.py \
 |---|---|
 | DAZ changes page structure | Playwright selectors in one file (`scraper.py`) — easy to update |
 | Bot detection on listings page | Add random delays (2–5s) between page fetches; use real Chromium UA |
-| Bot detection on account pages | Use Option A (CSV) instead of live library scrape |
-| Free item disappears before you claim it | Notification includes direct URL; some DAZ free items are permanent |
+| Free item disappears before you claim it | Re-notification when item reappears on free list; owned_skus suppresses permanently |
 | SQLite corruption on hard shutdown | WAL mode enabled; volume is on TrueNAS ZFS |
 
 ## Notes

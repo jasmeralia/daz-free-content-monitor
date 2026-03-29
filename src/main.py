@@ -83,47 +83,71 @@ async def run_once(
     dry_run: bool,
 ) -> int:
     """
-    Run one check cycle. Returns 0 on success, 1 on partial/scrape failure.
+    Run one check cycle. Returns 0 on success, 1 on scrape or notification failure.
     """
     owned_skus = db.get_owned_skus()
-    seen_skus = db.get_seen_skus()
+    logger.info("Starting check (owned=%d)", len(owned_skus))
 
-    logger.info("Starting check (owned=%d, seen=%d)", len(owned_skus), len(seen_skus))
-
-    result = await scraper.scrape_with_retry(seen_skus | owned_skus)
+    # Pass only owned_skus for the scraper's early-stop hint.  We must scan the
+    # full listing to detect reactivations, so we cannot short-circuit on
+    # previously-notified items — only on pages entirely composed of owned items.
+    result = await scraper.scrape_with_retry(owned_skus)
 
     if result.error:
         logger.error("Scrape failed: %s", result.error)
         return 1
 
-    new_items = [
-        item for item in result.items if item.sku not in owned_skus and item.sku not in seen_skus
-    ]
+    logger.info("Scrape complete: %d item(s) on free list", len(result.items))
 
-    logger.info(
-        "Scrape complete: %d total, %d new",
-        len(result.items),
-        len(new_items),
-    )
+    db.sync_free_items(result.items)
 
-    if not new_items:
+    pending = db.get_pending_notifications(owned_skus)
+    if not pending:
+        logger.info("No pending notifications")
         return 0
 
+    # Identify retries (pending items not from this scrape cycle)
+    current_skus = {i.sku for i in result.items}
+    retries = [i for i in pending if i.sku not in current_skus]
+    new_items = [i for i in pending if i.sku in current_skus]
+
+    if retries:
+        logger.warning(
+            "Retrying %d previously-failed notification(s): %s",
+            len(retries),
+            [i.sku for i in retries],
+        )
+    logger.info(
+        "%d new + %d retry = %d total notification(s) to send",
+        len(new_items),
+        len(retries),
+        len(pending),
+    )
+
     if dry_run:
-        logger.info("[DRY RUN] Would notify for %d item(s):", len(new_items))
-        for item in new_items:
+        logger.info("[DRY RUN] Would notify for %d item(s):", len(pending))
+        for item in pending:
             logger.info("  %s — %s", item.sku, item.title)
         return 0
 
-    for item in new_items:
-        db.insert_seen_item(item.sku, item.title, item.url)
+    # Send in batches of up to 10 (Discord embed limit per message).
+    # Mark each successful batch so failures are retried next cycle.
+    any_failed = False
+    for i in range(0, len(pending), 10):
+        batch = pending[i : i + 10]
+        ok = notifier.send(batch)
+        if ok:
+            for item in batch:
+                db.mark_notified(item.sku)
+        else:
+            any_failed = True
+            logger.error(
+                "Notification failed for %d item(s) — will retry next cycle: %s",
+                len(batch),
+                [item.sku for item in batch],
+            )
 
-    ok = notifier.send(new_items)
-    if not ok:
-        logger.error("One or more Discord notifications failed")
-        return 1
-
-    return 0
+    return 1 if any_failed else 0
 
 
 def main() -> None:
