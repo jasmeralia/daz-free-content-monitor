@@ -5,14 +5,19 @@ from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 
+from .scraper import FreeItem
+
 logger = logging.getLogger(__name__)
 
 SCHEMA = """
-CREATE TABLE IF NOT EXISTS seen_items (
-    sku        TEXT PRIMARY KEY,
-    title      TEXT NOT NULL,
-    url        TEXT NOT NULL,
-    first_seen TEXT NOT NULL
+CREATE TABLE IF NOT EXISTS free_items (
+    sku         TEXT PRIMARY KEY,
+    title       TEXT NOT NULL,
+    url         TEXT NOT NULL,
+    first_seen  TEXT NOT NULL,
+    last_seen   TEXT NOT NULL,
+    is_active   INTEGER NOT NULL DEFAULT 1,
+    notified_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS owned_skus (
@@ -49,25 +54,87 @@ class Database:
 
     def _init_schema(self) -> None:
         with self._get_conn() as conn:
-            conn.executescript(SCHEMA)
+            conn.executescript(SCHEMA)  # creates tables (issues implicit COMMIT)
+        with self._get_conn() as conn:
+            self._migrate(conn)  # atomic migration transaction
         logger.debug("Database initialized at %s", self.db_path)
 
-    def is_seen(self, sku: str) -> bool:
-        with self._get_conn() as conn:
-            row = conn.execute("SELECT 1 FROM seen_items WHERE sku = ?", (sku,)).fetchone()
-            return row is not None
+    def _migrate(self, conn: sqlite3.Connection) -> None:
+        """Migrate v0.1.0 seen_items table to free_items if present."""
+        row = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='seen_items'"
+        ).fetchone()
+        if row is None:
+            return
+        # Treat all previously-seen items as already-notified to avoid a
+        # re-notification flood on first startup after upgrade.
+        cursor = conn.execute("""
+            INSERT OR IGNORE INTO free_items
+                (sku, title, url, first_seen, last_seen, is_active, notified_at)
+            SELECT sku, title, url, first_seen, first_seen, 1, first_seen
+            FROM seen_items
+        """)
+        conn.execute("DROP TABLE seen_items")
+        logger.info("Migrated seen_items → free_items (%d row(s))", cursor.rowcount)
 
-    def insert_seen_item(self, sku: str, title: str, url: str) -> bool:
-        """Insert item into seen_items. Returns True if newly inserted."""
+    def sync_free_items(self, items: list[FreeItem]) -> None:
+        """
+        Upsert all scraped items as active, deactivate items no longer on the
+        free list, and reset notified_at to NULL for reactivated items so they
+        trigger a new notification.
+        """
+        now = _now()
+        current_skus = {item.sku for item in items}
+
         with self._get_conn() as conn:
-            cursor = conn.execute(
-                """
-                INSERT OR IGNORE INTO seen_items (sku, title, url, first_seen)
-                VALUES (?, ?, ?, ?)
-                """,
-                (sku, title, url, _now()),
+            for item in items:
+                conn.execute(
+                    """
+                    INSERT INTO free_items
+                        (sku, title, url, first_seen, last_seen, is_active, notified_at)
+                    VALUES (?, ?, ?, ?, ?, 1, NULL)
+                    ON CONFLICT(sku) DO UPDATE SET
+                        title       = excluded.title,
+                        url         = excluded.url,
+                        last_seen   = excluded.last_seen,
+                        is_active   = 1,
+                        notified_at = CASE
+                            WHEN free_items.is_active = 0 THEN NULL
+                            ELSE free_items.notified_at
+                        END
+                    """,
+                    (item.sku, item.title, item.url, now, now),
+                )
+
+            if current_skus:
+                placeholders = ",".join("?" * len(current_skus))
+                conn.execute(
+                    f"UPDATE free_items SET is_active = 0 "
+                    f"WHERE is_active = 1 AND sku NOT IN ({placeholders})",
+                    tuple(current_skus),
+                )
+            else:
+                conn.execute("UPDATE free_items SET is_active = 0 WHERE is_active = 1")
+
+    def get_pending_notifications(self, owned_skus: set[str]) -> list[FreeItem]:
+        """Return active items that have not yet been successfully notified."""
+        with self._get_conn() as conn:
+            rows = conn.execute(
+                "SELECT sku, title, url FROM free_items WHERE is_active = 1 AND notified_at IS NULL"
+            ).fetchall()
+        return [
+            FreeItem(sku=r["sku"], title=r["title"], url=r["url"])
+            for r in rows
+            if r["sku"] not in owned_skus
+        ]
+
+    def mark_notified(self, sku: str) -> None:
+        """Record that a notification was successfully delivered for this SKU."""
+        with self._get_conn() as conn:
+            conn.execute(
+                "UPDATE free_items SET notified_at = ? WHERE sku = ?",
+                (_now(), sku),
             )
-            return cursor.rowcount > 0
 
     def get_owned_skus(self) -> set[str]:
         with self._get_conn() as conn:
@@ -89,13 +156,8 @@ class Database:
                 (sku, title, _now()),
             )
 
-    def get_seen_skus(self) -> set[str]:
-        with self._get_conn() as conn:
-            rows = conn.execute("SELECT sku FROM seen_items").fetchall()
-            return {r["sku"] for r in rows}
-
     def upsert_owned_sku(self, sku: str, title: str | None = None) -> None:
-        """Insert or update an owned SKU (used by import_orders script)."""
+        """Insert or update an owned SKU (used by mark_owned script)."""
         with self._get_conn() as conn:
             conn.execute(
                 """
