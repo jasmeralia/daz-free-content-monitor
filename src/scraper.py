@@ -32,16 +32,16 @@ FREE_URL = "https://www.daz3d.com/free-3d-models"
 # ---------------------------------------------------------------------------
 
 # Container for each product card on the grid
-PRODUCT_CARD_SELECTOR = ".product-card-container, .product-grid-item, [class*='ProductCard']"
+PRODUCT_CARD_SELECTOR = "#slabs-container .item"
 
 # Anchor with href inside a card pointing to the product page
-PRODUCT_LINK_SELECTOR = "a[href*='/'][href*='daz3d']"
+PRODUCT_LINK_SELECTOR = "a.slab-link"
 
 # Element carrying the product title text
-PRODUCT_TITLE_SELECTOR = "[class*='title' i], h3, h4"
+PRODUCT_TITLE_SELECTOR = "h2"
 
-# Element carrying the price (should show "FREE" or "$0.00" for free items)
-PRODUCT_PRICE_SELECTOR = "[class*='price' i], [class*='Price']"
+# Element carrying the price (shows "Free" for free items)
+PRODUCT_PRICE_SELECTOR = ".prices-disp"
 
 # ---------------------------------------------------------------------------
 # Price recognition

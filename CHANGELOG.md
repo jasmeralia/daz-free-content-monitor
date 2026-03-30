@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-03-29
+
+### Fixed
+- `scraper.py`: corrected all four CSS selectors to match the actual rendered
+  DAZ store DOM — `PRODUCT_CARD_SELECTOR` (`#slabs-container .item`),
+  `PRODUCT_LINK_SELECTOR` (`a.slab-link`), `PRODUCT_TITLE_SELECTOR` (`h2`),
+  and `PRODUCT_PRICE_SELECTOR` (`.prices-disp`). The previous selectors
+  matched nothing, causing every scrape to return zero items.
+
 ## [0.1.5] - 2026-03-29
 
 ### Added
