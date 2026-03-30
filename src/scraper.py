@@ -231,14 +231,26 @@ class DazScraper:
                     logger.info("Page %d returned no items — end of listings", page_num)
                     break
 
+                page_skus = {i.sku for i in page_items}
+
+                # Stop if every item on this page was already collected in
+                # this run — catches catalogs where ?page=N returns the same
+                # results as page 1 (client-side-only pagination).
+                current_run_skus = {i.sku for i in all_items}
+                if page_num > 1 and page_skus.issubset(current_run_skus):
+                    logger.info(
+                        "Page %d: all SKUs already seen this run — end of catalog",
+                        page_num,
+                    )
+                    break
+
                 all_items.extend(page_items)
                 logger.info("Page %d: %d item(s) found", page_num, len(page_items))
 
-                # Early stop: if every SKU on this page is already known, all
-                # subsequent (older) pages will also be known.
-                page_skus = {i.sku for i in page_items}
+                # Early stop: if every SKU on this page is already known to
+                # the DB, all subsequent (older) pages will also be known.
                 if page_skus.issubset(seen_skus):
-                    logger.info("Page %d: all SKUs already seen — stopping pagination", page_num)
+                    logger.info("Page %d: all SKUs already in DB — stopping pagination", page_num)
                     break
         finally:
             await page.close()

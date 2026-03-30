@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-03-29
+
+### Fixed
+- `scraper.py`: stop pagination immediately when a page's items are all
+  already collected in the current run. The DAZ free catalog uses
+  client-side-only pagination — `?page=N` returns the same 16 items on
+  every URL — so the loop was previously running all 499 iterations to
+  the hard cap before stopping.
+
 ## [0.1.6] - 2026-03-29
 
 ### Fixed
