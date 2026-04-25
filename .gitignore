@@ -10,3 +10,4 @@ htmlcov/
 .coverage
 *.db
 data/
+*.url
