@@ -6,7 +6,13 @@ on:
       - master
     tags:
       - "v*"
-  workflow_dispatch:
+  pull_request:
+    branches:
+      - master
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
 
 env:
   REGISTRY: ghcr.io
@@ -48,8 +54,8 @@ jobs:
         run: python -m pytest tests/ --cov=src --cov-report=term-missing -v
 
   build-and-push:
-    needs: lint-and-test
-    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [lint-and-test, prepare-tag]
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -72,6 +78,7 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
+            type=raw,value=${{ needs.prepare-tag.outputs.tag_name }}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=latest
@@ -87,6 +94,51 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            APP_VERSION=${{ github.ref_name }}
+            APP_VERSION=${{ needs.prepare-tag.outputs.tag_name }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  prepare-tag:
+    needs: lint-and-test
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      tag_name: ${{ steps.resolve.outputs.tag_name || steps.bump.outputs.new_tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve existing tag
+        id: resolve
+        if: startsWith(github.ref, 'refs/tags/')
+        run: echo "tag_name=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Bump patch tag
+        id: bump
+        if: github.ref == 'refs/heads/master'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          for attempt in 1 2 3; do
+            git fetch --tags --force origin
+            latest=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n 1)
+            latest="${latest:-v0.0.0}"
+            version="${latest#v}"
+            IFS=. read -r major minor patch <<< "${version}"
+            new_tag="v${major}.${minor}.$((patch + 1))"
+            echo "Attempt ${attempt}: tagging ${new_tag} (previous: ${latest})"
+            if git tag -a "${new_tag}" -m "Release ${new_tag}" && git push origin "refs/tags/${new_tag}"; then
+              echo "new_tag=${new_tag}" >> "$GITHUB_OUTPUT"
+              break
+            fi
+            echo "Push failed (tag may already exist); retrying after refetch"
+            git tag -d "${new_tag}" 2>/dev/null || true
+            if [[ "${attempt}" -eq 3 ]]; then
+              echo "Failed to push a unique tag after 3 attempts"
+              exit 1
+            fi
+          done
