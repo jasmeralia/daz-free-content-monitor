@@ -4,8 +4,10 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    auto-merge: enable
 
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
       interval: "weekly"
+    auto-merge: enable
