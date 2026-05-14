@@ -1,6 +1,6 @@
 PYTHON ?= .venv/bin/python
 
-.PHONY: help venv venv-win lint test image clean
+.PHONY: help venv venv-win lint lint-fix test image clean
 
 help: ## Show available targets
 	@$(PYTHON) -c "\
@@ -19,6 +19,10 @@ venv-win: ## Create virtualenv and install dev dependencies (Windows)
 	python -m venv .venv-win
 	.venv-win\Scripts\pip install --upgrade pip
 	.venv-win\Scripts\pip install -r requirements-dev.txt
+
+lint-fix: ## Auto-fix ruff issues and format code
+	$(PYTHON) -m ruff check --fix src tests
+	$(PYTHON) -m ruff format src tests
 
 lint: ## Run ruff, pylint, and mypy
 	$(PYTHON) -m ruff check src tests
