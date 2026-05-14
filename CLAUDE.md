@@ -8,11 +8,17 @@ notifications with direct links to new free items.
 
 # MANDATORY CHANGE PROCESS
 
-1. After any change in the repository, run `make lint` and `make test`.
+1. After any change in the repository, run `make lint-fix && make lint && make test`.
 2. Any errors or warnings must be resolved before proceeding.
 3. Update the version (patch/Z only — see Versioning Rules) and run `make lint` again.
-4. Add a new entry in CHANGELOG.md, and commit and push to both the
-   master branch and a new tag specific to that version.
+4. Add a new entry in CHANGELOG.md, and commit and push via a pull request (never push directly to `master`).
+5. Use squash merge when merging pull requests.
+6. After merging, create and push a git tag for the new version.
+
+## Git Workflow
+
+- Never push commits directly to `master`. Always open a pull request from a feature/fix branch.
+- Use squash merge strategy when merging pull requests.
 
 ## Versioning Rules
 
