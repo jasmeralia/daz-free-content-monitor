@@ -1,2 +1,4 @@
 playwright==1.59.0
 tzdata==2026.2
+
+pydantic-settings>=2.0
