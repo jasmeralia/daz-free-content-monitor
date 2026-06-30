@@ -24,6 +24,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from dotenv import load_dotenv  # noqa: E402
+
+load_dotenv(Path(__file__).parent.parent / ".env")
+
 from playwright.async_api import async_playwright  # noqa: E402
 
 from src.claimer import (  # noqa: E402
@@ -49,18 +53,38 @@ def _check(label: str, found: bool) -> None:
     print(f"    [{mark}] {label}")
 
 
+def _find_chrome() -> str | None:
+    """Return path to a system Chrome/Chromium if Playwright's own binary is missing."""
+    candidates = [
+        "/usr/bin/google-chrome",
+        "/usr/bin/chromium-browser",
+        "/usr/bin/chromium",
+        "/snap/bin/chromium",
+    ]
+    for path in candidates:
+        if Path(path).exists():
+            return path
+    return None
+
+
 async def probe(email: str, password: str, product_url: str, headless: bool) -> None:
     SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
 
+    launch_kwargs: dict = {
+        "headless": headless,
+        "args": [
+            "--no-sandbox",
+            "--disable-setuid-sandbox",
+            "--disable-blink-features=AutomationControlled",
+        ],
+    }
+    system_chrome = _find_chrome()
+    if system_chrome:
+        print(f"Using system browser: {system_chrome}")
+        launch_kwargs["executable_path"] = system_chrome
+
     async with async_playwright() as pw:
-        browser = await pw.chromium.launch(
-            headless=headless,
-            args=[
-                "--no-sandbox",
-                "--disable-setuid-sandbox",
-                "--disable-blink-features=AutomationControlled",
-            ],
-        )
+        browser = await pw.chromium.launch(**launch_kwargs)
         ctx = await browser.new_context(
             user_agent=(
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -92,17 +116,29 @@ async def probe(email: str, password: str, product_url: str, headless: bool) -> 
         # ── 2. Submit login ─────────────────────────────────────────────────
         print(f"\n[2] Submitting login as {email}")
         if email_el and pwd_el and sub_el:
-            await page.fill(LOGIN_EMAIL_SELECTOR, email)
-            await page.fill(LOGIN_PASSWORD_SELECTOR, password)
+            # Use .last to skip any hidden duplicate in the header
+            await page.locator(LOGIN_EMAIL_SELECTOR).last.fill(email)
+            await page.locator(LOGIN_PASSWORD_SELECTOR).last.fill(password)
             await page.screenshot(path=str(SCREENSHOT_DIR / "02_login_filled.png"), full_page=True)
-            await page.click(LOGIN_SUBMIT_SELECTOR)
-            await page.wait_for_load_state("networkidle", timeout=30_000)
+            async with page.expect_navigation(wait_until="networkidle", timeout=30_000):
+                await page.locator(LOGIN_SUBMIT_SELECTOR).last.click()
             await page.screenshot(path=str(SCREENSHOT_DIR / "03_post_login.png"), full_page=True)
             print(f"    URL after submit: {page.url}")
+            # Look for inline error message if still on login page
+            if "/login" in page.url:
+                err_el = await page.query_selector(".error-msg, .message-error, #advice-required-entry-email")
+                err_text = await err_el.inner_text() if err_el else "(no error element found)"
+                print(f"    Login error: {err_text}")
             logged_in = await page.query_selector(LOGGED_IN_SELECTOR)
             _check(f"LOGGED_IN_SELECTOR {LOGGED_IN_SELECTOR!r}", bool(logged_in))
         else:
             print("    SKIPPED — fix login form selectors above first")
+
+        # ── 2b. Dump header to identify LOGGED_IN_SELECTOR ─────────────────
+        header_html: str = await page.evaluate(
+            "() => (document.querySelector('header, #header, .page-header') ?? document.body).innerHTML"
+        )
+        print(f"\n    Header HTML (first 2000 chars):\n{header_html[:2000]}")
 
         # ── 3. Product page ─────────────────────────────────────────────────
         print(f"\n[3] Product page: {product_url}")
@@ -134,6 +170,68 @@ async def probe(email: str, password: str, product_url: str, headless: bool) -> 
             }"""
         )
         print(f"\n    Button-like elements on product page:\n{btn_html[:3000]}")
+
+        # ── 3b. Find + add an unowned free item to probe checkout ───────────
+        print("\n[3b] Searching freebies page for an unowned item to add to cart...")
+        freebies_url = "https://www.daz3d.com/freebies"
+        await page.goto(freebies_url, wait_until="networkidle", timeout=30_000)
+        await page.screenshot(path=str(SCREENSHOT_DIR / "04b_freebies.png"), full_page=False)
+
+        # Collect all product links from the listing page (up to 20)
+        product_links: list[str] = await page.evaluate(
+            """() => {
+                const seen = new Set();
+                const out = [];
+                const sels = ['a.product-image', '.product-name a', 'h2.product-name a',
+                               '.product-title a', '[class*="product"] a[href]'];
+                for (const sel of document.querySelectorAll(sels.join(','))) {
+                    const h = sel.href;
+                    if (h && h.includes('daz3d.com') && !h.includes('/freebies') &&
+                            !h.includes('#') && !seen.has(h)) {
+                        seen.add(h);
+                        out.push(h);
+                        if (out.length >= 20) break;
+                    }
+                }
+                return out;
+            }"""
+        )
+        print(f"    Found {len(product_links)} product links on freebies page")
+
+        added_to_cart = False
+        for idx, link in enumerate(product_links):
+            print(f"    Checking [{idx + 1}/{len(product_links)}]: {link}")
+            try:
+                await page.goto(link, wait_until="networkidle", timeout=20_000)
+            except Exception:
+                continue
+            owned_check = await page.query_selector("button.btn-product-owned, button.btn-purchased")
+            if owned_check:
+                print("      → already owned, skipping")
+                continue
+            # Wait for a VISIBLE btn-cart (state=visible is the default)
+            try:
+                cart_btn = await page.wait_for_selector(
+                    ADD_TO_CART_SELECTOR, state="visible", timeout=5_000
+                )
+            except Exception:
+                print("      → no visible Add-to-Cart button, skipping")
+                continue
+            print("      → unowned! clicking Add to Cart...")
+            await page.screenshot(
+                path=str(SCREENSHOT_DIR / "04c_unowned_product.png"), full_page=False
+            )
+            await cart_btn.click()
+            await page.wait_for_timeout(2000)
+            await page.screenshot(
+                path=str(SCREENSHOT_DIR / "04d_after_add.png"), full_page=False
+            )
+            print(f"      → URL after add: {page.url}")
+            added_to_cart = True
+            break
+
+        if not added_to_cart:
+            print("    All freebies already owned — checkout probe will show empty-cart state")
 
         # ── 4. Checkout page ────────────────────────────────────────────────
         print(f"\n[4] Checkout: {CHECKOUT_URL}")

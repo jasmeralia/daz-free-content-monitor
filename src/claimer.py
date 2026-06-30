@@ -31,8 +31,8 @@ logger = logging.getLogger(__name__)
 # Store URLs
 # ---------------------------------------------------------------------------
 
-LOGIN_URL = "https://www.daz3d.com/my-account"
-CHECKOUT_URL = "https://www.daz3d.com/checkout/"
+LOGIN_URL = "https://www.daz3d.com/customer/account/login/"
+CHECKOUT_URL = "https://www.daz3d.com/checkout/onepage/"
 
 # ---------------------------------------------------------------------------
 # CSS selectors — UNVERIFIED placeholders.
@@ -40,30 +40,38 @@ CHECKOUT_URL = "https://www.daz3d.com/checkout/"
 # to get screenshots and selector matches, then update these constants.
 # ---------------------------------------------------------------------------
 
-# Login form
-LOGIN_EMAIL_SELECTOR = "#login-email"
-LOGIN_PASSWORD_SELECTOR = "#login-password"
-LOGIN_SUBMIT_SELECTOR = "button[type='submit'].login-submit"
+# Login form — scoped to #login-form to avoid duplicate hidden header inputs
+LOGIN_EMAIL_SELECTOR = "#login-form input[name='login[username]']"
+LOGIN_PASSWORD_SELECTOR = "#login-form input[name='login[password]']"
+LOGIN_SUBMIT_SELECTOR = "#send2"
 
-# Element present only when authenticated (used to verify login succeeded)
-LOGGED_IN_SELECTOR = ".my-account-nav, .account-nav, [data-test='account-menu']"
+# Element present only when authenticated (secondary check after URL-based check)
+# Logout link reliably appears only when logged in
+LOGGED_IN_SELECTOR = "a[href*='logout']"
 
 # Product page: "Add to Cart" button (absent when item is already owned)
-ADD_TO_CART_SELECTOR = "button.add-to-cart, button[data-action='add-to-cart']"
+ADD_TO_CART_SELECTOR = "button.btn-cart"
 
 # Product page: indicator that item is already in the user's library
-ALREADY_OWNED_SELECTOR = ".already-owned, .in-library, .download-btn, [data-test='download-button']"
+# VERIFIED: button with class btn-product-owned / btn-purchased appears when owned
+ALREADY_OWNED_SELECTOR = "button.btn-product-owned, button.btn-purchased"
 
 # Header cart item count badge (sanity-check after add)
-CART_BADGE_SELECTOR = ".cart-count, .mini-cart-count, [data-test='cart-count']"
+# UNVERIFIED — needs a probe run while logged in with items in cart
+CART_BADGE_SELECTOR = ".cart-count, #header-cart-count"
 
-# Checkout: final submit button for $0 orders
+# Checkout: final submit button for $0 orders (Magento 1.x onepage checkout review step)
+# UNVERIFIED — checkout page 404s when cart is empty; verify on first real claim run
 PLACE_ORDER_SELECTOR = (
-    "button.place-order, button[data-action='place-order'], button[data-test='place-order']"
+    "#review-form-submit, "
+    "button.btn-place-order, "
+    "#review-buttons-container button, "
+    "button[onclick*='review.save']"
 )
 
 # Success page element present after a completed order
-ORDER_SUCCESS_SELECTOR = ".order-success, .checkout-success, [data-test='order-success']"
+# UNVERIFIED — verify on first real claim run through a completed checkout
+ORDER_SUCCESS_SELECTOR = ".success-msg, .success-msg-box, h1.page-title"
 
 # ---------------------------------------------------------------------------
 # Result model
@@ -211,18 +219,31 @@ class DazClaimer:
                 "Run scripts/probe_claim.py to find the correct selectors."
             ) from exc
 
-        await page.fill(LOGIN_EMAIL_SELECTOR, self._email)
-        await page.fill(LOGIN_PASSWORD_SELECTOR, self._password)
-        await page.click(LOGIN_SUBMIT_SELECTOR)
-        await page.wait_for_load_state("networkidle", timeout=self._cfg.page_timeout_ms)
+        # Use .last to skip any hidden duplicate fields in the page header
+        await page.locator(LOGIN_EMAIL_SELECTOR).last.fill(self._email)
+        await page.locator(LOGIN_PASSWORD_SELECTOR).last.fill(self._password)
+        async with page.expect_navigation(
+            wait_until="networkidle", timeout=self._cfg.page_timeout_ms
+        ):
+            await page.locator(LOGIN_SUBMIT_SELECTOR).last.click()
 
-        logged_in = await page.query_selector(LOGGED_IN_SELECTOR)
-        if not logged_in:
+        # Primary check: we should no longer be on the login URL
+        if "/customer/account/login" in page.url:
             raise ClaimerError(
-                "Login failed — LOGGED_IN_SELECTOR not present after submit. "
-                "Check credentials and LOGGED_IN_SELECTOR. Run scripts/probe_claim.py."
+                f"Login failed — still on login page after submit (url={page.url}). "
+                "Check DAZ_EMAIL / DAZ_PASSWORD credentials."
             )
-        logger.info("Login successful")
+        # Secondary CSS check if LOGGED_IN_SELECTOR is configured
+        if LOGGED_IN_SELECTOR:
+            logged_in = await page.query_selector(LOGGED_IN_SELECTOR)
+            if not logged_in:
+                logger.warning(
+                    "LOGGED_IN_SELECTOR %r not found on %s — "
+                    "update the selector or ignore if login otherwise succeeded",
+                    LOGGED_IN_SELECTOR,
+                    page.url,
+                )
+        logger.info("Login successful (url=%s)", page.url)
 
     async def _add_to_cart(self, page: Page, item: FreeItem) -> str:
         """
