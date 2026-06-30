@@ -9,19 +9,8 @@ services:
 
     volumes:
       - /mnt/myzmirror/daz_data:/app/data
+      - /mnt/myzmirror/daz_data/.env:/app/.env:ro
 
-    environment:
-      PYTHONUNBUFFERED: "1"
-      DISCORD_WEBHOOK_URL: "https://discord.com/api/webhooks/REPLACE_ME"
-      CHECK_INTERVAL_SECONDS: "3600"
-      DB_PATH: "/app/data/daz_monitor.db"
-      LOG_FILE: "/app/data/daz_monitor.log"
-      LOG_LEVEL: "INFO"
-      DISPLAY_TIMEZONE: "America/Los_Angeles"
-      # PAGE_DELAY_MIN: "2.0"
-      # PAGE_DELAY_MAX: "5.0"
-      # PAGE_TIMEOUT_MS: "30000"
-      # MAX_RETRIES: "3"
-      # DRY_RUN: "0"
+    environment: {}
 
     restart: unless-stopped

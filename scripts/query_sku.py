@@ -43,7 +43,7 @@ def _query_sku(conn: sqlite3.Connection, sku: str) -> None:
     if row:
         status = "active" if row["is_active"] else "inactive"
         notified = row["notified_at"] if row["notified_at"] else "pending (not yet delivered)"
-        print(f"  [free_items]")
+        print("  [free_items]")
         print(f"    title      : {row['title']}")
         print(f"    url        : {row['url']}")
         print(f"    first_seen : {row['first_seen']}")
@@ -60,7 +60,7 @@ def _query_sku(conn: sqlite3.Connection, sku: str) -> None:
 
     if owned:
         title = owned["title"] or "(none)"
-        print(f"  [owned_skus]")
+        print("  [owned_skus]")
         print(f"    title    : {title}")
         print(f"    added_at : {owned['added_at']}")
     else:

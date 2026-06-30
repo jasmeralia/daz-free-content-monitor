@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.8] - 2026-06-30
+
+### Added
+- `src/claimer.py`: `DazClaimer` class that logs in to the DAZ store, adds all
+  new free items to the cart one by one, and completes a single $0 checkout at
+  the end of each cycle. Controlled by `AUTO_CLAIM=1`, `DAZ_EMAIL`, and
+  `DAZ_PASSWORD` env vars. Successfully claimed items are written to `owned_skus`
+  automatically, suppressing future notifications.
+- `scripts/probe_claim.py`: interactive probe that validates every CSS selector
+  in `claimer.py` against the live DAZ store, saves screenshots to
+  `data/probe_claim/`, and dumps button HTML to aid selector identification.
+  Run this before enabling `AUTO_CLAIM`.
+- `src/config.py`: added `daz_email`, `daz_password`, and `auto_claim` settings.
+
+### Changed
+- `docker-compose.yml`: switched to `.env` bind-mount pattern
+  (`/mnt/myzmirror/daz_data/.env:/app/.env:ro`) with `environment: {}`;
+  all configuration now lives in the host `.env` file rather than inline in the
+  compose file.
+- `pyproject.toml`: disabled `duplicate-code`, `too-many-locals` pylint rules
+  which fire as false positives on the browser context manager pattern and
+  complex orchestration functions.
+- `README.md`, `AGENTS.md`: updated for auto-claim feature, `.env` deployment
+  pattern, revised directory layout, main loop pseudocode, and risk table.
+- `AGENTS.md`: added documentation update as a mandatory step in the change
+  process.
+
+### Fixed
+- `scripts/query_sku.py`: removed spurious `f` prefix from two plain string
+  literals (ruff F541).
+
 ## [0.1.7] - 2026-03-29
 
 ### Fixed

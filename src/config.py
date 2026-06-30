@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     max_retries: int = 3
     startup_delay_seconds: int = 15
     display_timezone: str = _DEFAULT_TZ
+    daz_email: str = ""
+    daz_password: str = ""
+    auto_claim: bool = False
 
 
 def get_display_tz() -> ZoneInfo:
