@@ -17,6 +17,8 @@ disable = [
     "missing-function-docstring",
     "too-few-public-methods",
     "broad-exception-caught",
+    "duplicate-code",
+    "too-many-locals",
 ]
 
 [tool.pylint.format]

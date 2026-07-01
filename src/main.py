@@ -8,9 +8,10 @@ import sys
 import time
 from pathlib import Path
 
+from .claimer import ClaimerConfig, ClaimResult, DazClaimer
 from .db import Database
 from .notifier import DiscordNotifier
-from .scraper import DazScraper, ScraperConfig
+from .scraper import DazScraper, FreeItem, ScraperConfig
 from .version import get_app_version
 
 logger = logging.getLogger(__name__)
@@ -67,6 +68,19 @@ def _get_env_bool(key: str) -> bool:
     return os.environ.get(key, "").lower() in ("1", "true", "yes")
 
 
+def _load_claimer_config() -> tuple[str, str, ClaimerConfig] | None:
+    """Return (email, password, config) if AUTO_CLAIM is enabled with credentials, else None."""
+    if not _get_env_bool("AUTO_CLAIM"):
+        return None
+    email = _get_env("DAZ_EMAIL")
+    password = _get_env("DAZ_PASSWORD")
+    if not (email and password):
+        logger.warning("AUTO_CLAIM is enabled but DAZ_EMAIL or DAZ_PASSWORD is not set — disabling")
+        return None
+    logger.info("Auto-claim enabled (DAZ_EMAIL=%s)", email)
+    return email, password, ClaimerConfig()
+
+
 def _load_scraper_config() -> ScraperConfig:
     return ScraperConfig(
         page_delay_min=_get_env_float("PAGE_DELAY_MIN", 2.0),
@@ -76,11 +90,27 @@ def _load_scraper_config() -> ScraperConfig:
     )
 
 
+async def _autoclaim(claimer: DazClaimer, db: Database, pending: list[FreeItem]) -> ClaimResult:
+    result: ClaimResult = await claimer.claim_items(pending)
+    for item in result.claimed:
+        db.insert_owned_sku(item.sku, item.title)
+    if result.skipped:
+        logger.info(
+            "Already in library (%d): %s", len(result.skipped), [i.sku for i in result.skipped]
+        )
+    if result.failed:
+        logger.warning(
+            "Failed to auto-claim (%d): %s", len(result.failed), [i.sku for i in result.failed]
+        )
+    return result
+
+
 async def run_once(
     db: Database,
     scraper: DazScraper,
     notifier: DiscordNotifier,
     dry_run: bool,
+    claimer: DazClaimer | None = None,
 ) -> int:
     """
     Run one check cycle. Returns 0 on success, 1 on scrape or notification failure.
@@ -123,6 +153,14 @@ async def run_once(
         len(retries),
         len(pending),
     )
+
+    # Auto-claim: add all pending items to cart, then checkout once at the end.
+    if claimer is not None and pending:
+        if dry_run:
+            logger.info("[DRY RUN] Would auto-claim %d item(s)", len(pending))
+        else:
+            claim_result = await _autoclaim(claimer, db, pending)
+            notifier.send_claim_result(claim_result)
 
     if dry_run:
         logger.info("[DRY RUN] Would notify for %d item(s):", len(pending))
@@ -167,6 +205,8 @@ def main() -> None:
     run_once_flag = _get_env_bool("RUN_ONCE")
     scraper_cfg = _load_scraper_config()
 
+    claimer_cfg = _load_claimer_config()
+
     startup_delay = _get_env_int("STARTUP_DELAY_SECONDS", 15)
 
     if dry_run:
@@ -183,6 +223,10 @@ def main() -> None:
 
         async def _cycle() -> int:
             async with DazScraper(scraper_cfg) as scraper:
+                if claimer_cfg is not None:
+                    email, password, cfg = claimer_cfg
+                    async with DazClaimer(email, password, cfg) as claimer:
+                        return await run_once(db, scraper, notifier, dry_run, claimer)
                 return await run_once(db, scraper, notifier, dry_run)
 
         exit_code = asyncio.run(_cycle())

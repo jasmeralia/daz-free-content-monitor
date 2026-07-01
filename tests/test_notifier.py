@@ -1,7 +1,14 @@
 import json
 from unittest.mock import MagicMock, patch
 
-from src.notifier import MAX_EMBEDS_PER_MESSAGE, DiscordNotifier
+from src.claimer import ClaimResult
+from src.notifier import (
+    COLOR_FAILURE,
+    COLOR_PARTIAL,
+    COLOR_SUCCESS,
+    MAX_EMBEDS_PER_MESSAGE,
+    DiscordNotifier,
+)
 from src.scraper import FreeItem
 
 
@@ -114,3 +121,126 @@ class TestDiscordNotifier:
             result = self.notifier.send([_make_item()])
 
         assert result is False
+
+
+class TestSendClaimResult:
+    def setup_method(self):
+        self.notifier = DiscordNotifier("https://discord.com/api/webhooks/test/token")
+
+    def _capture(self) -> tuple[list[dict], MagicMock]:
+        """Return (captured_payloads, mock_urlopen) pair."""
+        captured: list[dict] = []
+
+        def fake_urlopen(req, timeout=None):
+            captured.append(json.loads(req.data.decode()))
+            resp = MagicMock()
+            resp.status = 204
+            resp.__enter__ = lambda s: s
+            resp.__exit__ = MagicMock(return_value=False)
+            return resp
+
+        mock = MagicMock(side_effect=fake_urlopen)
+        return captured, mock
+
+    def test_nothing_to_report_skips_post(self):
+        result = ClaimResult(claimed=[], failed=[], skipped=[_make_item(1)], checkout_ok=False)
+        with patch("urllib.request.urlopen") as mock_open:
+            ok = self.notifier.send_claim_result(result)
+        assert ok is True
+        mock_open.assert_not_called()
+
+    def test_full_success_green_embed(self):
+        items = [_make_item(1), _make_item(2)]
+        result = ClaimResult(claimed=items, failed=[], skipped=[], checkout_ok=True)
+        captured, mock_open = self._capture()
+        with patch("urllib.request.urlopen", mock_open):
+            ok = self.notifier.send_claim_result(result)
+        assert ok is True
+        mock_open.assert_called_once()
+        embed = captured[0]["embeds"][0]
+        assert embed["color"] == COLOR_SUCCESS
+        assert "✅" in embed["title"]
+        assert "2" in embed["title"]
+        assert "checkout OK" in embed["title"]
+        assert "Test Product 1" in embed["description"]
+        assert "Test Product 2" in embed["description"]
+
+    def test_partial_failure_yellow_embed(self):
+        result = ClaimResult(
+            claimed=[_make_item(1)],
+            failed=[_make_item(2)],
+            skipped=[],
+            checkout_ok=True,
+        )
+        captured, mock_open = self._capture()
+        with patch("urllib.request.urlopen", mock_open):
+            ok = self.notifier.send_claim_result(result)
+        assert ok is True
+        embed = captured[0]["embeds"][0]
+        assert embed["color"] == COLOR_PARTIAL
+        assert "⚠️" in embed["title"]
+        assert "checkout OK" in embed["title"]
+        assert "Test Product 1" in embed["description"]
+        assert "Test Product 2" in embed["description"]
+
+    def test_checkout_failure_red_embed(self):
+        result = ClaimResult(
+            claimed=[_make_item(1), _make_item(2)],
+            failed=[],
+            skipped=[],
+            checkout_ok=False,
+        )
+        captured, mock_open = self._capture()
+        with patch("urllib.request.urlopen", mock_open):
+            ok = self.notifier.send_claim_result(result)
+        assert ok is True
+        embed = captured[0]["embeds"][0]
+        assert embed["color"] == COLOR_FAILURE
+        assert "❌" in embed["title"]
+        assert "Checkout failed" in embed["title"]
+        assert "manually" in embed["description"]
+
+    def test_all_failed_red_embed(self):
+        result = ClaimResult(
+            claimed=[],
+            failed=[_make_item(1), _make_item(2)],
+            skipped=[],
+            checkout_ok=False,
+        )
+        captured, mock_open = self._capture()
+        with patch("urllib.request.urlopen", mock_open):
+            ok = self.notifier.send_claim_result(result)
+        assert ok is True
+        embed = captured[0]["embeds"][0]
+        assert embed["color"] == COLOR_FAILURE
+        assert "❌" in embed["title"]
+        assert "2" in embed["title"]
+        assert "Test Product 1" in embed["description"]
+
+    def test_skipped_count_shown_when_also_claimed(self):
+        result = ClaimResult(
+            claimed=[_make_item(1)],
+            failed=[],
+            skipped=[_make_item(2), _make_item(3)],
+            checkout_ok=True,
+        )
+        captured, mock_open = self._capture()
+        with patch("urllib.request.urlopen", mock_open):
+            self.notifier.send_claim_result(result)
+        embed = captured[0]["embeds"][0]
+        assert "2" in embed["description"]  # skipped count
+        assert "Already owned" in embed["description"]
+
+    def test_http_failure_returns_false(self):
+        import urllib.error
+
+        result = ClaimResult(claimed=[_make_item(1)], failed=[], skipped=[], checkout_ok=True)
+
+        def fake_urlopen(req, timeout=None):
+            raise urllib.error.HTTPError(
+                url="", code=500, msg="err", hdrs=None, fp=__import__("io").BytesIO(b"")
+            )
+
+        with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+            ok = self.notifier.send_claim_result(result)
+        assert ok is False

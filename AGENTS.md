@@ -10,10 +10,11 @@ notifications with direct links to new free items.
 
 1. After any change in the repository, run `make lint-fix && make lint && make test`.
 2. Any errors or warnings must be resolved before proceeding.
-3. Update the version (patch/Z only — see Versioning Rules) and run `make lint` again.
-4. Add a new entry in CHANGELOG.md, and commit and push via a pull request (never push directly to `master`).
-5. Use squash merge when merging pull requests.
-6. After merging, create and push a git tag for the new version.
+3. Update all affected documentation: `README.md`, `AGENTS.md` (directory layout, pseudocode, env var tables, risk table), and any relevant files under `docs/`. This is mandatory for every code change.
+4. Update the version (patch/Z only — see Versioning Rules) and run `make lint` again.
+5. Add a new entry in CHANGELOG.md, and commit and push via a pull request (never push directly to `master`).
+6. Use squash merge when merging pull requests.
+7. After merging, create and push a git tag for the new version.
 
 ## Git Workflow
 
@@ -61,25 +62,29 @@ Discord webhook notifications, Docker Compose deployment on TrueNAS SCALE
 ```
 daz-monitor/
 ├── AGENTS.md
-│   ├── CLAUDE.md
+├── CLAUDE.md
 ├── docker-compose.yml
 ├── Dockerfile
 ├── docs/
-│   └── mark_owned.md     # guide on marking items as owned
-├── LICENSE               # MIT License
+│   └── mark_owned.md       # guide on marking items as owned
+├── LICENSE                 # MIT License
 ├── Makefile
 ├── README.md
-├── requirements.txt      # modules actually required to run the app
-├── requirements-dev.txt  # dev tools: ruff, mypy, pylint, includes requirements.txt
+├── requirements.txt        # modules actually required to run the app
+├── requirements-dev.txt    # dev tools: ruff, mypy, pylint, includes requirements.txt
 ├── scripts/
-│   ├── mark_owned.py     # mark items as owned by URL or SKU slug
-│   └── query_sku.py      # inspect DB state for a product by URL or SKU slug
+│   ├── mark_owned.py       # mark items as owned by URL or SKU slug
+│   ├── probe_claim.py      # validate auto-claim CSS selectors; saves screenshots
+│   ├── probe_selectors.py  # validate scraper CSS selectors; dumps rendered HTML
+│   └── query_sku.py        # inspect DB state for a product by URL or SKU slug
 └── src/
-    ├── main.py           # entrypoint, scheduler loop
-    ├── config.py         # env-var config helpers (timezone, etc.)
-    ├── scraper.py        # Playwright-based DAZ store scraper
-    ├── db.py             # SQLite schema and queries
-    └── notifier.py       # Discord webhook sender
+    ├── main.py             # entrypoint, scheduler loop
+    ├── claimer.py          # Playwright-based DAZ store auto-claimer
+    ├── config.py           # pydantic-settings config, timezone helper
+    ├── scraper.py          # Playwright-based DAZ store scraper
+    ├── db.py               # SQLite schema and queries
+    ├── notifier.py         # Discord webhook sender
+    └── version.py          # app version constant
 ```
 
 ## SQLite Schema
@@ -124,6 +129,7 @@ Target URL: `https://www.daz3d.com/free-3d-models`
 
 - No CSV export exists on DAZ's site
 - Use `scripts/mark_owned.py` to manually mark items as owned by URL or SKU
+- With `AUTO_CLAIM=1`, successfully claimed items are marked owned automatically
 - Items in `owned_skus` are permanently suppressed — never notified about them
 
 ## Main Loop (src/main.py)
@@ -144,8 +150,16 @@ every CHECK_INTERVAL_SECONDS:
   pending = db.get_pending_notifications(owned_skus)
     → active items with notified_at IS NULL, excluding owned_skus
 
+  if AUTO_CLAIM and pending:
+    claimer.claim_items(pending)
+      → login to DAZ store
+      → for each item: navigate to product page → Add to Cart
+      → one $0 checkout at the end
+    for each successfully claimed item:
+      db.insert_owned_sku(sku)   # suppress future notifications
+
   for each batch of ≤10 pending items:
-    ok = notifier.send(batch)
+    ok = notifier.send(batch)   # Discord notification (including claimed items)
     if ok:
       db.mark_notified(sku) for each item in batch
     else:
@@ -159,6 +173,7 @@ every CHECK_INTERVAL_SECONDS:
 - Item reappears later → notified again ✓ (reset on reactivation)
 - Discord delivery failure → retried every cycle until success ✓
 - Item in owned_skus → never notified ✓
+- AUTO_CLAIM enabled → item claimed and marked owned automatically ✓
 
 ## Discord Notification Format
 
@@ -187,19 +202,29 @@ retried with the `retry_after` delay. Failed batches are retried each poll cycle
 
 ## Docker Compose (sketch)
 
+All configuration is supplied via a `.env` file bind-mounted at `/app/.env`.
+The data volume and `.env` share the same host directory so only one path needs
+to be managed.
+
 ```yaml
 services:
   daz-monitor:
-    # build: .
     image: ghcr.io/jasmeralia/daz-free-content-monitor:latest
     restart: unless-stopped
     volumes:
       - /mnt/myzmirror/daz_data:/app/data
-    environment:
-      - PYTHONUNBUFFERED=1
-      - DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
-      - CHECK_INTERVAL_SECONDS=3600
-      - DISPLAY_TIMEZONE=America/Los_Angeles
+      - /mnt/myzmirror/daz_data/.env:/app/.env:ro
+    environment: {}
+```
+
+Example `.env`:
+```ini
+DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
+CHECK_INTERVAL_SECONDS=3600
+DISPLAY_TIMEZONE=America/Los_Angeles
+# AUTO_CLAIM=1
+# DAZ_EMAIL=your@email.com
+# DAZ_PASSWORD=yourpassword
 ```
 
 ## scripts/mark_owned.py
@@ -222,10 +247,12 @@ See `docs/mark_owned.md` for full details.
 
 | Risk | Mitigation |
 |---|---|
-| DAZ changes page structure | Playwright selectors in one file (`scraper.py`) — easy to update |
-| Bot detection on listings page | Add random delays (2–5s) between page fetches; use real Chromium UA |
-| Free item disappears before you claim it | Re-notification when item reappears on free list; owned_skus suppresses permanently |
+| DAZ changes page structure | Scraper selectors in one file (`scraper.py`) — run `probe_selectors.py` to identify new ones |
+| Bot detection on listings page | Random delays (2–5s) between page fetches; real Chromium UA |
+| Free item disappears before you claim it | Re-notification when item reappears on free list; `owned_skus` suppresses permanently |
 | SQLite corruption on hard shutdown | WAL mode enabled; volume is on TrueNAS ZFS |
+| Auto-claim selectors break after DAZ store update | Claimer selectors in one file (`claimer.py`) — run `probe_claim.py` to identify new ones |
+| DAZ flags automated checkout activity | Per-item delays (1.5–3.5s); webdriver flag suppressed; one checkout per cycle |
 
 ## Notes
 

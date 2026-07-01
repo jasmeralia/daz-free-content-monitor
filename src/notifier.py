@@ -5,6 +5,7 @@ import urllib.error
 import urllib.request
 from datetime import datetime
 
+from .claimer import ClaimResult
 from .config import get_display_tz
 from .scraper import FreeItem
 
@@ -17,7 +18,10 @@ DISCORD_UA = (
 )
 
 MAX_EMBEDS_PER_MESSAGE = 10
-EMBED_COLOR = 0x00B0F4  # blue
+EMBED_COLOR = 0x00B0F4  # blue — new free item notifications
+COLOR_SUCCESS = 0x57F287  # green — all claimed, checkout OK
+COLOR_PARTIAL = 0xFEE75C  # yellow — some claimed, some failed
+COLOR_FAILURE = 0xED4245  # red — checkout failed or all items failed
 
 
 class DiscordNotifier:
@@ -101,3 +105,50 @@ class DiscordNotifier:
                 all_ok = False
 
         return all_ok
+
+    def send_claim_result(self, result: ClaimResult) -> bool:
+        """Send a Discord embed summarising an auto-claim run. Returns True on success."""
+        if not result.claimed and not result.failed:
+            return True  # nothing happened worth reporting
+
+        lines: list[str] = []
+
+        if result.claimed:
+            titles = ", ".join(i.title for i in result.claimed)
+            lines.append(f"**Claimed ({len(result.claimed)}):** {titles}")
+        if result.failed:
+            titles = ", ".join(i.title for i in result.failed)
+            lines.append(f"**Failed ({len(result.failed)}):** {titles}")
+        if result.skipped:
+            lines.append(f"**Already owned:** {len(result.skipped)} item(s) skipped")
+
+        if result.claimed and result.checkout_ok and not result.failed:
+            color = COLOR_SUCCESS
+            title = f"✅ Auto-claimed {len(result.claimed)} item(s) — checkout OK"
+        elif result.claimed and result.checkout_ok and result.failed:
+            color = COLOR_PARTIAL
+            title = (
+                f"⚠️ Auto-claimed {len(result.claimed)}, {len(result.failed)} failed — checkout OK"
+            )
+        elif result.claimed and not result.checkout_ok:
+            color = COLOR_FAILURE
+            title = f"❌ Checkout failed — {len(result.claimed)} item(s) added to cart"
+            lines.append("_Items remain in cart — complete checkout manually._")
+        else:
+            color = COLOR_FAILURE
+            title = f"❌ Auto-claim failed for {len(result.failed)} item(s)"
+
+        embed: dict[str, object] = {
+            "title": title,
+            "description": "\n".join(lines),
+            "color": color,
+            "footer": {
+                "text": datetime.now(get_display_tz()).strftime("Claimed: %Y-%m-%d %H:%M %Z")
+            },
+        }
+        ok = self._post_payload({"embeds": [embed]})
+        if ok:
+            logger.info("Discord claim-result notification sent: %s", result.summary())
+        else:
+            logger.error("Failed to send Discord claim-result notification")
+        return ok
