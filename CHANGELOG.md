@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.9] - 2026-07-01
+
+### Added
+- `DiscordNotifier.send_claim_result()`: sends a Discord embed after each auto-claim
+  run summarising what was claimed, what failed, and whether checkout succeeded.
+  Green for full success, yellow for partial, red for checkout failure or all-failed.
+- `tests/test_notifier.py`: seven new tests covering all claim-result notification paths.
+
 ## [0.1.8] - 2026-06-30
 
 ### Added

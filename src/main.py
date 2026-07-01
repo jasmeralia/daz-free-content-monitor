@@ -159,7 +159,8 @@ async def run_once(
         if dry_run:
             logger.info("[DRY RUN] Would auto-claim %d item(s)", len(pending))
         else:
-            await _autoclaim(claimer, db, pending)
+            claim_result = await _autoclaim(claimer, db, pending)
+            notifier.send_claim_result(claim_result)
 
     if dry_run:
         logger.info("[DRY RUN] Would notify for %d item(s):", len(pending))
