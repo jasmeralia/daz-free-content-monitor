@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.10] - 2026-07-02
+
+### Changed
+- `AGENTS.md`: added Deployment Access section with SSH coordinates (`ssh truenas`),
+  container name, data volume path, DB query pattern, and OpenSearch log query examples.
+- `AGENTS.md`: corrected Dockerfile base image to `v1.61.0-jammy` and removed stale
+  note that TrueNAS doesn't support `.env` files.
+
 ## [0.1.9] - 2026-07-01
 
 ### Added
