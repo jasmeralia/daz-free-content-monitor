@@ -48,6 +48,39 @@ Same pattern as `adult_sub_monitor`: Playwright scraping, SQLite persistence,
 Discord webhook notifications, Docker Compose deployment on TrueNAS SCALE
 (Goldeye).
 
+## Deployment Access
+
+- **SSH**: `ssh truenas` (192.168.1.25, user `morgan`)
+- **Container name**: `ix-daz-monitor-daz-monitor-1`
+- **Data volume**: `/mnt/myzmirror/daz_data/` — contains `daz_monitor.db` and `.env`
+- **Local `.env`**: `.env` in the repo root (gitignored) mirrors the deployed config
+- **Container logs**: indexed in OpenSearch (`container-logs` index, field `container_name`)
+
+### Useful commands
+
+```bash
+# Live container logs
+ssh truenas "docker logs ix-daz-monitor-daz-monitor-1 --tail 50 -f"
+
+# Query SQLite DB (sqlite3 not in container image; use python3 via docker exec)
+ssh truenas "docker exec ix-daz-monitor-daz-monitor-1 python3 -c \"
+import sqlite3; conn = sqlite3.connect('/app/data/daz_monitor.db')
+for r in conn.execute('SELECT title, first_seen, is_active FROM free_items ORDER BY first_seen DESC LIMIT 20'): print(r)
+\""
+
+# Search logs via OpenSearch API (on TrueNAS, port 9200)
+curl -s 'http://192.168.1.25:9200/container-logs/_search' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "size": 20,
+    "query": {"match": {"container_name": "ix-daz-monitor-daz-monitor-1"}},
+    "sort": [{"@timestamp": {"order": "desc"}}]
+  }' | python3 -m json.tool
+```
+
+OpenSearch Dashboards is available at `http://192.168.1.25:5601`.
+Filter by `container_name: ix-daz-monitor-daz-monitor-1` in the `container-logs` index.
+
 ## Stack
 
 - **Python 3.12**
@@ -191,14 +224,11 @@ retried with the `retry_after` delay. Failed batches are retried each poll cycle
 
 ## Dockerfile Notes
 
-- Base: `mcr.microsoft.com/playwright/python:v1.44.0-jammy` (includes
-  Chromium, avoids manual browser install)
-- Or: `python:3.12-slim` + `playwright install --with-deps chromium` in build
+- Base: `mcr.microsoft.com/playwright/python:v1.61.0-jammy` + `playwright install chromium --with-deps`
 - Run as non-root user
 - `data/` directory should be a host mounted volume so SQLite persists across
   container restarts
-- Environmental variables should be included in docker-compose.yml as TrueNAS
-  does not support .env files.
+- Configuration is supplied via a `.env` file bind-mounted at `/app/.env` (see Docker Compose section)
 
 ## Docker Compose (sketch)
 
