@@ -251,7 +251,9 @@ class DazClaimer:
         Returns 'added', 'skipped' (already in library), or 'failed'.
         """
         try:
-            await page.goto(item.url, wait_until="networkidle", timeout=self._cfg.page_timeout_ms)
+            await page.goto(
+                item.url, wait_until="domcontentloaded", timeout=self._cfg.page_timeout_ms
+            )
         except PlaywrightTimeout:
             logger.warning("Timeout loading product page for %s — marking failed", item.sku)
             return "failed"
@@ -279,7 +281,7 @@ class DazClaimer:
         logger.info("Proceeding to checkout")
         timeout = self._cfg.page_timeout_ms
         try:
-            await page.goto(CHECKOUT_URL, wait_until="networkidle", timeout=timeout)
+            await page.goto(CHECKOUT_URL, wait_until="domcontentloaded", timeout=timeout)
 
             btn = await page.wait_for_selector(PLACE_ORDER_SELECTOR, timeout=timeout)
             if btn is None:

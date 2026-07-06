@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.11] - 2026-07-06
+
+### Changed
+- `src/claimer.py`: use `domcontentloaded` instead of `networkidle` when
+  loading product and checkout pages; some DAZ pages never fire `networkidle`
+  due to background analytics, causing valid items to be marked as failed.
+- `src/main.py`: when the auto-claimer detects that an item is already in the
+  DAZ library (`result.skipped`), record it in `owned_skus` and mark it
+  notified so no Discord embed is sent — no action needed from the user.
+- `src/main.py`: after a successful claim run, suppress individual Discord
+  embeds for items that were auto-claimed (covered by the `send_claim_result`
+  summary) and for items already owned; only failed items receive individual
+  notifications.
+
 ## [0.1.10] - 2026-07-02
 
 ### Changed
