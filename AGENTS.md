@@ -14,7 +14,7 @@ notifications with direct links to new free items.
 4. Update the version (patch/Z only — see Versioning Rules) and run `make lint` again.
 5. Add a new entry in CHANGELOG.md, and commit and push via a pull request (never push directly to `master`).
 6. Use squash merge when merging pull requests.
-7. After merging, create and push a git tag for the new version.
+7. After merging, CI automatically creates and pushes the git tag — do not create tags manually.
 
 ## Git Workflow
 
@@ -163,6 +163,8 @@ Target URL: `https://www.daz3d.com/free-3d-models`
 - No CSV export exists on DAZ's site
 - Use `scripts/mark_owned.py` to manually mark items as owned by URL or SKU
 - With `AUTO_CLAIM=1`, successfully claimed items are marked owned automatically
+- With `AUTO_CLAIM=1`, items already in the DAZ library (detected via product page
+  button) are also added to `owned_skus` and suppressed without Discord notification
 - Items in `owned_skus` are permanently suppressed — never notified about them
 
 ## Main Loop (src/main.py)
@@ -186,13 +188,18 @@ every CHECK_INTERVAL_SECONDS:
   if AUTO_CLAIM and pending:
     claimer.claim_items(pending)
       → login to DAZ store
-      → for each item: navigate to product page → Add to Cart
-      → one $0 checkout at the end
+      → for each item: navigate to product page → Add to Cart (domcontentloaded)
+      → one $0 checkout at the end (domcontentloaded)
     for each successfully claimed item:
       db.insert_owned_sku(sku)   # suppress future notifications
+    for each already-owned item (skipped by claimer):
+      db.insert_owned_sku(sku)   # record in our DB
+      db.mark_notified(sku)      # suppress Discord notification
+    notifier.send_claim_result(result)   # single summary embed (claimed + failed)
+    pending = pending − (claimed ∪ skipped)   # remove handled items
 
-  for each batch of ≤10 pending items:
-    ok = notifier.send(batch)   # Discord notification (including claimed items)
+  for each batch of ≤10 remaining pending items (failed claims only):
+    ok = notifier.send(batch)   # Discord notification
     if ok:
       db.mark_notified(sku) for each item in batch
     else:
@@ -207,6 +214,8 @@ every CHECK_INTERVAL_SECONDS:
 - Discord delivery failure → retried every cycle until success ✓
 - Item in owned_skus → never notified ✓
 - AUTO_CLAIM enabled → item claimed and marked owned automatically ✓
+- AUTO_CLAIM: already-owned item detected → added to owned_skus, no Discord noise ✓
+- AUTO_CLAIM: claimed items → covered by send_claim_result summary, no individual embed ✓
 
 ## Discord Notification Format
 

@@ -94,6 +94,11 @@ async def _autoclaim(claimer: DazClaimer, db: Database, pending: list[FreeItem])
     result: ClaimResult = await claimer.claim_items(pending)
     for item in result.claimed:
         db.insert_owned_sku(item.sku, item.title)
+    for item in result.skipped:
+        # Already in DAZ library but not our DB — record ownership and mark
+        # notified so no Discord embed is sent; no action needed from the user.
+        db.insert_owned_sku(item.sku, item.title)
+        db.mark_notified(item.sku)
     if result.skipped:
         logger.info(
             "Already in library (%d): %s", len(result.skipped), [i.sku for i in result.skipped]
@@ -161,6 +166,13 @@ async def run_once(
         else:
             claim_result = await _autoclaim(claimer, db, pending)
             notifier.send_claim_result(claim_result)
+            # Remove claimed and already-owned items from the individual Discord
+            # notification queue. Claimed items are covered by send_claim_result;
+            # already-owned items need no notification at all.
+            handled_skus = {i.sku for i in claim_result.claimed} | {
+                i.sku for i in claim_result.skipped
+            }
+            pending = [i for i in pending if i.sku not in handled_skus]
 
     if dry_run:
         logger.info("[DRY RUN] Would notify for %d item(s):", len(pending))
