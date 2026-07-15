@@ -5,8 +5,12 @@ updates:
   schedule:
     interval: weekly
   auto-merge: enable
+  reviewers:
+  - jasmeralia
 - package-ecosystem: docker
   directory: /
   schedule:
     interval: weekly
   auto-merge: enable
+  reviewers:
+  - jasmeralia
