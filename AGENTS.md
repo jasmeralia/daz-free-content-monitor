@@ -8,7 +8,7 @@ notifications with direct links to new free items.
 
 # MANDATORY CHANGE PROCESS
 
-1. After any change in the repository, run `make lint-fix && make lint && make test`.
+1. After any change in the repository, run `make lintfix && make lint && make test`.
 2. Any errors or warnings must be resolved before proceeding.
 3. Update all affected documentation: `README.md`, `AGENTS.md` (directory layout, pseudocode, env var tables, risk table), and any relevant files under `docs/`. This is mandatory for every code change.
 4. Update the version (patch/Z only — see Versioning Rules) and run `make lint` again.
