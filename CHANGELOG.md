@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.12] - 2026-07-21
+
+### Fixed
+- `src/claimer.py`: `_login` waited for the login email field via
+  `page.wait_for_selector()`, which resolves to the *first* DOM match — a
+  hidden duplicate `login[username]` input in the page header that never
+  becomes visible. This caused every auto-claim login attempt to time out
+  once DAZ's login page started rendering that duplicate field, even though
+  the subsequent `.fill()`/`.click()` calls already correctly used `.last` to
+  target the visible form. The visibility wait now also uses
+  `.last.wait_for(state="visible")` to match.
+
 ## [0.1.11] - 2026-07-06
 
 ### Changed

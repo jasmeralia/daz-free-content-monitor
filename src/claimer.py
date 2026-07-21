@@ -211,7 +211,11 @@ class DazClaimer:
         await page.goto(LOGIN_URL, wait_until="networkidle", timeout=self._cfg.page_timeout_ms)
 
         try:
-            await page.wait_for_selector(LOGIN_EMAIL_SELECTOR, timeout=self._cfg.page_timeout_ms)
+            # .last skips the hidden duplicate login form in the page header — wait_for_selector()
+            # would resolve to that first (hidden) match and never see it become visible
+            await page.locator(LOGIN_EMAIL_SELECTOR).last.wait_for(
+                state="visible", timeout=self._cfg.page_timeout_ms
+            )
         except PlaywrightTimeout as exc:
             raise ClaimerError(
                 f"Login form not found at {LOGIN_URL} — "
