@@ -12,3 +12,9 @@ updates:
     interval: weekly
   reviewers:
   - jasmeralia
+- package-ecosystem: github-actions
+  directory: /
+  schedule:
+    interval: weekly
+  reviewers:
+  - jasmeralia
