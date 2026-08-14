@@ -79,7 +79,7 @@ docker compose run --rm daz-monitor python scripts/mark_owned.py \
 ```bash
 make venv                            # Create virtualenv and install deps
 make lint PYTHON=.venv/bin/python    # Run ruff + pylint + mypy
-make test PYTHON=.venv/bin/python    # Run tests with coverage
+make test PYTHON=.venv/bin/python    # Run tests and write coverage.xml for Codecov
 make image                           # Build Docker image locally
 ```
 
