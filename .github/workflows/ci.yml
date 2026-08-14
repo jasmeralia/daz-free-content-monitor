@@ -51,7 +51,14 @@ jobs:
         run: python -m mypy src
 
       - name: Tests
-        run: python -m pytest tests/ --cov=src --cov-report=term-missing -v
+        run: python -m pytest tests/ --cov=src --cov-report=term-missing --cov-report=xml:coverage.xml -v
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage.xml
+          fail_ci_if_error: false
 
   build-and-push:
     needs: [lint-and-test, prepare-tag]

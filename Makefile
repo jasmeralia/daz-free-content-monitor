@@ -31,7 +31,7 @@ lint: ## Run ruff, pylint, and mypy
 	$(PYTHON) -m mypy src
 
 test: ## Run tests with coverage
-	$(PYTHON) -m pytest tests/ --cov=src --cov-report=term-missing -v
+	$(PYTHON) -m pytest tests/ --cov=src --cov-report=term-missing --cov-report=xml:coverage.xml -v
 
 image: ## Build the Docker image
 	docker build -t daz-free-content-monitor .

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- CI now publishes its 43% baseline coverage to Codecov as an informational
+  report; project and patch coverage can become required after reaching 80%.
+
 ## [0.1.12] - 2026-07-21
 
 ### Fixed
