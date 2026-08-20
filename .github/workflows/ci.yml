@@ -54,7 +54,7 @@ jobs:
         run: python -m pytest tests/ --cov=src --cov-report=term-missing --cov-report=xml:coverage.xml -v
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.xml
