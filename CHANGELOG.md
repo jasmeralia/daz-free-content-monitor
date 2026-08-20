@@ -7,9 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.13] - 2026-08-20
+
 ### Added
-- CI now publishes its 43% baseline coverage to Codecov as an informational
-  report; project and patch coverage can become required after reaching 80%.
+- Test coverage raised from 43% to 98%, with new pytest suites covering
+  `src/claimer.py`, `src/scraper.py`, and `src/main.py` (Playwright browser
+  interactions mocked via `AsyncMock`/`MagicMock` for deterministic,
+  network-free CI runs).
+
+### Changed
+- `codecov.yml`: project and patch coverage status checks are no longer
+  `informational` — both now gate at the existing 80% target.
 
 ## [0.1.12] - 2026-07-21
 
