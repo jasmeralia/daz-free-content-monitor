@@ -85,7 +85,8 @@ make image                           # Build Docker image locally
 
 The container uses the official Playwright Python Noble image and Python 3.12.
 Keep the base image's Python version compatible with the minimum Python version
-required by packages in `requirements.txt`.
+required by packages in `requirements.txt`. It runs as UID/GID 1000 to access
+the TrueNAS data directory and mode-600 `.env` bind mount.
 
 ## Scraper Notes
 

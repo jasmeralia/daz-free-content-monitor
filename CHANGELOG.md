@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.15] - 2026-10-21
+
+### Fixed
+- `Dockerfile`: run as UID/GID 1000 so the container can read the mode-600
+  `.env` file and write the TrueNAS data volume, both owned by UID/GID 1000.
+
 ## [0.1.14] - 2026-10-21
 
 ### Fixed
