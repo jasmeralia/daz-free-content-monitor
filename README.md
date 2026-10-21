@@ -83,6 +83,10 @@ make test PYTHON=.venv/bin/python    # Run tests and write coverage.xml for Code
 make image                           # Build Docker image locally
 ```
 
+The container uses the official Playwright Python Noble image and Python 3.12.
+Keep the base image's Python version compatible with the minimum Python version
+required by packages in `requirements.txt`.
+
 ## Scraper Notes
 
 CSS selectors for the DAZ product grid are defined as constants at the top of
