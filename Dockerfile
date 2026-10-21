@@ -17,7 +17,7 @@ COPY scripts/ ./scripts/
 # Persistent data directory (mount as volume at runtime)
 RUN mkdir -p /app/data
 
-# Drop to non-root user provided by the Playwright base image
-USER pwuser
+# Match the UID/GID that own the TrueNAS data directory and mode-600 .env file.
+USER 1000:1000
 
 CMD ["python", "-m", "src.main"]
