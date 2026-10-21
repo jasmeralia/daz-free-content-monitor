@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.14] - 2026-10-21
+
+### Fixed
+- `Dockerfile`: use the Playwright Noble image, which provides Python 3.12 and
+  supports the current `pydantic-settings>=2.16.0` dependency. The Jammy image
+  provides Python 3.10 and cannot install that dependency.
+
 ## [0.1.13] - 2026-08-20
 
 ### Added

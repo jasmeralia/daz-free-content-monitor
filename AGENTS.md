@@ -233,7 +233,7 @@ retried with the `retry_after` delay. Failed batches are retried each poll cycle
 
 ## Dockerfile Notes
 
-- Base: `mcr.microsoft.com/playwright/python:v1.61.0-jammy` + `playwright install chromium --with-deps`
+- Base: `mcr.microsoft.com/playwright/python:v1.64.0-noble` + `playwright install chromium --with-deps`; the Noble image provides Python 3.12, matching CI and the `pydantic-settings>=2.16.0` dependency.
 - Run as non-root user
 - `data/` directory should be a host mounted volume so SQLite persists across
   container restarts
@@ -292,6 +292,7 @@ See `docs/mark_owned.md` for full details.
 | SQLite corruption on hard shutdown | WAL mode enabled; volume is on TrueNAS ZFS |
 | Auto-claim selectors break after DAZ store update | Claimer selectors in one file (`claimer.py`) — run `probe_claim.py` to identify new ones |
 | DAZ flags automated checkout activity | Per-item delays (1.5–3.5s); webdriver flag suppressed; one checkout per cycle |
+| Container base image has an older Python than app dependencies require | Keep the Playwright image's Ubuntu variant on Noble (Python 3.12) and aligned with the Python version used by CI |
 
 ## Notes
 
