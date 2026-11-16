@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.16] - 2026-11-16
+
+### Fixed
+- `src/claimer.py`: use `domcontentloaded` for login-page navigation and the
+  post-submit navigation wait. DAZ pages can keep background requests active,
+  so waiting for `networkidle` caused Playwright timeouts before auto-claiming.
+- `AGENTS.md`: point container log queries at `container-logs-write`, the active
+  rollover alias, instead of the stale pre-rollover `container-logs` index.
+
 ## [0.1.15] - 2026-10-21
 
 ### Fixed

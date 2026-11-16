@@ -208,7 +208,7 @@ class DazClaimer:
 
     async def _login(self, page: Page) -> None:
         logger.info("Logging in to DAZ store as %s", self._email)
-        await page.goto(LOGIN_URL, wait_until="networkidle", timeout=self._cfg.page_timeout_ms)
+        await page.goto(LOGIN_URL, wait_until="domcontentloaded", timeout=self._cfg.page_timeout_ms)
 
         try:
             # .last skips the hidden duplicate login form in the page header — wait_for_selector()
@@ -227,7 +227,7 @@ class DazClaimer:
         await page.locator(LOGIN_EMAIL_SELECTOR).last.fill(self._email)
         await page.locator(LOGIN_PASSWORD_SELECTOR).last.fill(self._password)
         async with page.expect_navigation(
-            wait_until="networkidle", timeout=self._cfg.page_timeout_ms
+            wait_until="domcontentloaded", timeout=self._cfg.page_timeout_ms
         ):
             await page.locator(LOGIN_SUBMIT_SELECTOR).last.click()
 
