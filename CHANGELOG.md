@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.17] - 2026-11-16
+
+### Fixed
+- `src/claimer.py`: target the current visible DAZ sign-in form and its
+  `#email`, `#pass`, and `#account-login-submit` controls. DAZ retains a hidden
+  header form with duplicate account controls, so selectors must be scoped to
+  `#account-login-form`.
+
 ## [0.1.16] - 2026-11-16
 
 ### Fixed

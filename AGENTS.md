@@ -294,7 +294,7 @@ See `docs/mark_owned.md` for full details.
 | Bot detection on listings page | Random delays (2–5s) between page fetches; real Chromium UA |
 | Free item disappears before you claim it | Re-notification when item reappears on free list; `owned_skus` suppresses permanently |
 | SQLite corruption on hard shutdown | WAL mode enabled; volume is on TrueNAS ZFS |
-| Auto-claim selectors break after DAZ store update | Claimer selectors in one file (`claimer.py`) — run `probe_claim.py` to identify new ones |
+| Auto-claim selectors break after DAZ store update | Claimer selectors in one file (`claimer.py`) — run `probe_claim.py` to identify new ones; the visible login form is `#account-login-form` |
 | DAZ login pages keep background requests active | Login waits for DOM content and the visible form instead of `networkidle` |
 | DAZ flags automated checkout activity | Per-item delays (1.5–3.5s); webdriver flag suppressed; one checkout per cycle |
 | Container base image has an older Python than app dependencies require | Keep the Playwright image's Ubuntu variant on Noble (Python 3.12) and aligned with the Python version used by CI |
