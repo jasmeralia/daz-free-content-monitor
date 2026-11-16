@@ -180,7 +180,13 @@ class DazClaimer:
 
         page = await self._context.new_page()
         try:
-            await self._login(page)
+            try:
+                await self._login(page)
+            except ClaimerError as exc:
+                logger.error("Could not log in; %d item(s) were not claimed: %s", len(items), exc)
+                result.failed.extend(items)
+                logger.info("Claim run complete: %s", result.summary())
+                return result
 
             for item in items:
                 delay = random.uniform(self._cfg.item_delay_min, self._cfg.item_delay_max)
@@ -227,10 +233,23 @@ class DazClaimer:
         # Use .last to skip any hidden duplicate fields in the page header
         await page.locator(LOGIN_EMAIL_SELECTOR).last.fill(self._email)
         await page.locator(LOGIN_PASSWORD_SELECTOR).last.fill(self._password)
-        async with page.expect_navigation(
-            wait_until="domcontentloaded", timeout=self._cfg.page_timeout_ms
-        ):
-            await page.locator(LOGIN_SUBMIT_SELECTOR).last.click()
+        try:
+            async with page.expect_navigation(
+                wait_until="domcontentloaded", timeout=self._cfg.page_timeout_ms
+            ):
+                await page.locator(LOGIN_SUBMIT_SELECTOR).last.click()
+        except PlaywrightTimeout as exc:
+            # Some DAZ login responses complete without a document navigation.
+            # Treat the authenticated marker as success; otherwise report a
+            # normal claim failure instead of letting the timeout crash the cycle.
+            logged_in = await page.query_selector(LOGGED_IN_SELECTOR)
+            if not logged_in:
+                raise ClaimerError(
+                    "Login failed — submit did not navigate and the logged-in marker "
+                    f"was not found (url={page.url})."
+                ) from exc
+            logger.info("Login confirmed by authenticated marker without navigation")
+            return
 
         # Primary check: we should no longer be on the login URL
         if "/customer/account/login" in page.url:

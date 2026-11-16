@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.18] - 2026-11-16
+
+### Fixed
+- `src/claimer.py`: handle DAZ sign-in responses that do not navigate; confirm
+  authentication through the logged-in marker or report a claim failure without
+  crashing the monitor cycle.
+
 ## [0.1.17] - 2026-11-16
 
 ### Fixed

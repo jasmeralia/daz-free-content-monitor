@@ -90,6 +90,19 @@ class TestClaimItems:
         with pytest.raises(ClaimerError, match="Not started"):
             await claimer.claim_items([_item(1)])
 
+    async def test_login_failure_marks_all_items_failed_without_crashing(self):
+        claimer, page = self._claimer_with_context()
+        items = [_item(1), _item(2)]
+
+        with patch.object(
+            claimer, "_login", new=AsyncMock(side_effect=ClaimerError("login timed out"))
+        ):
+            result = await claimer.claim_items(items)
+
+        assert result.failed == items
+        assert result.claimed == []
+        page.close.assert_awaited_once()
+
     async def test_added_items_checked_out_successfully(self):
         claimer, page = self._claimer_with_context()
         items = [_item(1), _item(2)]
@@ -193,6 +206,26 @@ class TestLogin:
         page.expect_navigation.assert_called_once_with(
             wait_until="domcontentloaded", timeout=claimer._cfg.page_timeout_ms
         )
+
+    async def test_navigation_timeout_accepts_authenticated_marker(self):
+        claimer = DazClaimer("user@example.com", "hunter2")
+        page = self._page_for_login()
+        nav_cm = page.expect_navigation.return_value
+        nav_cm.__aexit__ = AsyncMock(side_effect=PlaywrightTimeout("timeout"))
+
+        await claimer._login(page)
+
+        page.query_selector.assert_awaited_once_with("a[href*='logout']")
+
+    async def test_navigation_timeout_without_authenticated_marker_raises(self):
+        claimer = DazClaimer("user@example.com", "hunter2")
+        page = self._page_for_login()
+        page.query_selector = AsyncMock(return_value=None)
+        nav_cm = page.expect_navigation.return_value
+        nav_cm.__aexit__ = AsyncMock(side_effect=PlaywrightTimeout("timeout"))
+
+        with pytest.raises(ClaimerError, match="submit did not navigate"):
+            await claimer._login(page)
 
     async def test_login_form_not_found_raises(self):
         claimer = DazClaimer("user@example.com", "hunter2")
