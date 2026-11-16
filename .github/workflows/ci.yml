@@ -101,7 +101,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            APP_VERSION=${{ needs.prepare-tag.outputs.tag_name }}
+            APP_VERSION=${{ needs.prepare-tag.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

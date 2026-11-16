@@ -1,9 +1,12 @@
 FROM mcr.microsoft.com/playwright/python:v1.65.0-noble
 
+ARG APP_VERSION
+
 WORKDIR /app
 
 # Ensure stdout/stderr are unbuffered so logs appear immediately in Dozzle/Docker
 ENV PYTHONUNBUFFERED=1
+ENV APP_VERSION=${APP_VERSION}
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
