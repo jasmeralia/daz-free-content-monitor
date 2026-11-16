@@ -102,7 +102,8 @@ daz-monitor/
 ├── docker-compose.yml
 ├── Dockerfile
 ├── docs/
-│   └── mark_owned.md       # guide on marking items as owned
+│   ├── mark_owned.md       # guide on marking items as owned
+│   └── authorize_daz.md    # human sign-in and session-file setup
 ├── LICENSE                 # MIT License
 ├── Makefile
 ├── README.md
@@ -110,7 +111,8 @@ daz-monitor/
 ├── requirements-dev.txt    # dev tools: ruff, mypy, pylint, includes requirements.txt
 ├── scripts/
 │   ├── mark_owned.py       # mark items as owned by URL or SKU slug
-│   ├── probe_claim.py      # validate auto-claim CSS selectors; saves screenshots
+│   ├── authorize_daz.py    # open a visible DAZ sign-in flow and save session state
+│   ├── probe_claim.py      # read-only auto-claim selector inspection
 │   ├── probe_selectors.py  # validate scraper CSS selectors; dumps rendered HTML
 │   └── query_sku.py        # inspect DB state for a product by URL or SKU slug
 └── src/
@@ -165,7 +167,12 @@ Target URL: `https://www.daz3d.com/free-3d-models`
 
 - No CSV export exists on DAZ's site
 - Use `scripts/mark_owned.py` to manually mark items as owned by URL or SKU
-- With `AUTO_CLAIM=1`, successfully claimed items are marked owned automatically
+- With `AUTO_CLAIM=1`, the claimer loads `DAZ_STORAGE_STATE`, a browser session
+  previously authorized by a human through `scripts/authorize_daz.py`
+- The service does not submit credentials or automate DAZ's Turnstile challenge;
+  when the saved session expires, claims fail cleanly until a human authorizes a
+  fresh session
+- Successfully claimed items are marked owned automatically
 - With `AUTO_CLAIM=1`, items already in the DAZ library (detected via product page
   button) are also added to `owned_skus` and suppressed without Discord notification
 - Items in `owned_skus` are permanently suppressed — never notified about them
@@ -190,7 +197,7 @@ every CHECK_INTERVAL_SECONDS:
 
   if AUTO_CLAIM and pending:
     claimer.claim_items(pending)
-      → load the DAZ login page until DOM content is ready, then wait for the visible login form
+      → load the DAZ login page and confirm the saved human-authorized session is active
       → for each item: navigate to product page → Add to Cart (domcontentloaded)
       → one $0 checkout at the end (domcontentloaded)
     for each successfully claimed item:
@@ -266,9 +273,15 @@ DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
 CHECK_INTERVAL_SECONDS=3600
 DISPLAY_TIMEZONE=America/Los_Angeles
 # AUTO_CLAIM=1
-# DAZ_EMAIL=your@email.com
-# DAZ_PASSWORD=yourpassword
+# DAZ_STORAGE_STATE=/app/data/daz-auth.json
 ```
+
+Create the session on a desktop with `python scripts/authorize_daz.py`; install
+Playwright's Chromium browser first if needed. Complete sign-in and any DAZ
+challenge manually in the visible browser. The saved file
+contains reusable session cookies and must be kept private. Mount it under the
+data volume so the container can read and refresh it. Do not attempt to bypass
+DAZ's Turnstile/authentication flow.
 
 ## scripts/mark_owned.py
 
@@ -291,13 +304,13 @@ See `docs/mark_owned.md` for full details.
 | Risk | Mitigation |
 |---|---|
 | DAZ changes page structure | Scraper selectors in one file (`scraper.py`) — run `probe_selectors.py` to identify new ones |
-| Bot detection on listings page | Random delays (2–5s) between page fetches; real Chromium UA |
+| DAZ challenges or blocks automated listing access | Keep 2–5s delays between pages; respect the challenge and do not disguise automation or bypass it |
 | Free item disappears before you claim it | Re-notification when item reappears on free list; `owned_skus` suppresses permanently |
 | SQLite corruption on hard shutdown | WAL mode enabled; volume is on TrueNAS ZFS |
-| Auto-claim selectors break after DAZ store update | Claimer selectors in one file (`claimer.py`) — run `probe_claim.py` to identify new ones; the visible login form is `#account-login-form` |
-| DAZ login pages keep background requests active | Login waits for DOM content and the visible form instead of `networkidle` |
-| DAZ sign-in response does not navigate | Confirm the authenticated marker; failed login marks the pending claims failed without crashing the cycle |
-| DAZ flags automated checkout activity | Per-item delays (1.5–3.5s); webdriver flag suppressed; one checkout per cycle |
+| Auto-claim selectors break after DAZ store update | Product and checkout selectors live in `claimer.py`; use a manual selector probe and avoid submitting orders during inspection |
+| DAZ login pages keep background requests active | Load the saved session and wait for DOM content; sign-in itself is done manually |
+| DAZ expires or rejects the saved session | Require the logged-in marker; report failed claims without crashing the cycle, then reauthorize in the visible browser flow |
+| DAZ flags automated checkout activity | Per-item delays (1.5–3.5s); one checkout per cycle; do not bypass DAZ security challenges |
 | Container base image has an older Python than app dependencies require | Keep the Playwright image's Ubuntu variant on Noble (Python 3.12) and aligned with the Python version used by CI |
 
 ## Notes

@@ -20,20 +20,11 @@ async def main() -> None:
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(
             headless=True,
-            args=["--no-sandbox", "--disable-setuid-sandbox",
-                  "--disable-blink-features=AutomationControlled"],
+            args=["--no-sandbox", "--disable-setuid-sandbox"],
         )
         ctx = await browser.new_context(
-            user_agent=(
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/124.0.0.0 Safari/537.36"
-            ),
             viewport={"width": 1920, "height": 1080},
             locale="en-US",
-        )
-        await ctx.add_init_script(
-            "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
         )
 
         page = await ctx.new_page()
@@ -62,7 +53,7 @@ async def main() -> None:
         )
         print(f"\nFound {len(items_html)} items (showing first 3):\n")
         for i, html in enumerate(items_html):
-            print(f"--- Item {i+1} ---")
+            print(f"--- Item {i + 1} ---")
             print(html[:1500])
             print()
 
