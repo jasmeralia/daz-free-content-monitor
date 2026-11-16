@@ -40,10 +40,11 @@ CHECKOUT_URL = "https://www.daz3d.com/checkout/onepage/"
 # to get screenshots and selector matches, then update these constants.
 # ---------------------------------------------------------------------------
 
-# Login form — scoped to #login-form to avoid duplicate hidden header inputs
-LOGIN_EMAIL_SELECTOR = "#login-form input[name='login[username]']"
-LOGIN_PASSWORD_SELECTOR = "#login-form input[name='login[password]']"
-LOGIN_SUBMIT_SELECTOR = "#send2"
+# The account page keeps a hidden account-drop form in the header. Scope these
+# selectors to the visible sign-in form to avoid matching that duplicate.
+LOGIN_EMAIL_SELECTOR = "#account-login-form input#email"
+LOGIN_PASSWORD_SELECTOR = "#account-login-form input#pass"
+LOGIN_SUBMIT_SELECTOR = "#account-login-submit"
 
 # Element present only when authenticated (secondary check after URL-based check)
 # Logout link reliably appears only when logged in

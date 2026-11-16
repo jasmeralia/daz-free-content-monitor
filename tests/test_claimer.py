@@ -4,6 +4,9 @@ import pytest
 from playwright.async_api import TimeoutError as PlaywrightTimeout
 
 from src.claimer import (
+    LOGIN_EMAIL_SELECTOR,
+    LOGIN_PASSWORD_SELECTOR,
+    LOGIN_SUBMIT_SELECTOR,
     ClaimerConfig,
     ClaimerError,
     ClaimResult,
@@ -157,6 +160,11 @@ class TestClaimItems:
 
 
 class TestLogin:
+    def test_selectors_target_visible_sign_in_form(self):
+        assert LOGIN_EMAIL_SELECTOR == "#account-login-form input#email"
+        assert LOGIN_PASSWORD_SELECTOR == "#account-login-form input#pass"
+        assert LOGIN_SUBMIT_SELECTOR == "#account-login-submit"
+
     def _page_for_login(self) -> MagicMock:
         page = MagicMock()
         page.goto = AsyncMock()

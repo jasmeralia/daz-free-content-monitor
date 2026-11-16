@@ -98,7 +98,8 @@ run `scripts/probe_selectors.py` to dump the rendered HTML and identify new
 selectors.
 
 The auto-claim selectors (login, add-to-cart, checkout) live at the top of
-`src/claimer.py` and can be re-validated with `scripts/probe_claim.py`.
+`src/claimer.py` and can be re-validated with `scripts/probe_claim.py`. Login
+selectors target the visible `#account-login-form`, not the hidden header form.
 
 ## License
 
