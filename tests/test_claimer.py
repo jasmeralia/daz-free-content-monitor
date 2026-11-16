@@ -4,9 +4,6 @@ import pytest
 from playwright.async_api import TimeoutError as PlaywrightTimeout
 
 from src.claimer import (
-    LOGIN_EMAIL_SELECTOR,
-    LOGIN_PASSWORD_SELECTOR,
-    LOGIN_SUBMIT_SELECTOR,
     ClaimerConfig,
     ClaimerError,
     ClaimResult,
@@ -45,7 +42,7 @@ class TestContextManager:
     async def test_aenter_configures_browser_and_context(self):
         browser = MagicMock()
         context = MagicMock()
-        context.add_init_script = AsyncMock()
+        context.storage_state = AsyncMock()
         browser.new_context = AsyncMock(return_value=context)
         browser.close = AsyncMock()
         context.close = AsyncMock()
@@ -54,7 +51,7 @@ class TestContextManager:
             "src.claimer.async_playwright",
             return_value=_mock_playwright_start(browser),
         ):
-            claimer = DazClaimer("user@example.com", "hunter2")
+            claimer = DazClaimer("data/daz-auth.json")
             result = await claimer.__aenter__()
             assert result is claimer
             assert claimer._context is context
@@ -64,13 +61,13 @@ class TestContextManager:
         browser.close.assert_awaited_once()
 
     async def test_aexit_noop_when_never_entered(self):
-        claimer = DazClaimer("user@example.com", "hunter2")
+        claimer = DazClaimer("data/daz-auth.json")
         await claimer.__aexit__()  # must not raise
 
 
 class TestClaimItems:
     def _claimer_with_context(self) -> tuple[DazClaimer, MagicMock]:
-        claimer = DazClaimer("user@example.com", "hunter2")
+        claimer = DazClaimer("data/daz-auth.json")
         page = MagicMock()
         page.close = AsyncMock()
         context = MagicMock()
@@ -86,7 +83,7 @@ class TestClaimItems:
         mock_login.assert_not_called()
 
     async def test_raises_when_context_not_initialized(self):
-        claimer = DazClaimer("user@example.com", "hunter2")
+        claimer = DazClaimer("data/daz-auth.json")
         with pytest.raises(ClaimerError, match="Not started"):
             await claimer.claim_items([_item(1)])
 
@@ -173,94 +170,43 @@ class TestClaimItems:
 
 
 class TestLogin:
-    def test_selectors_target_visible_sign_in_form(self):
-        assert LOGIN_EMAIL_SELECTOR == "#account-login-form input#email"
-        assert LOGIN_PASSWORD_SELECTOR == "#account-login-form input#pass"
-        assert LOGIN_SUBMIT_SELECTOR == "#account-login-submit"
-
     def _page_for_login(self) -> MagicMock:
         page = MagicMock()
         page.goto = AsyncMock()
-        locator = MagicMock()
-        locator.last.wait_for = AsyncMock()
-        locator.last.fill = AsyncMock()
-        locator.last.click = AsyncMock()
-        page.locator = MagicMock(return_value=locator)
-
-        nav_cm = MagicMock()
-        nav_cm.__aenter__ = AsyncMock(return_value=None)
-        nav_cm.__aexit__ = AsyncMock(return_value=False)
-        page.expect_navigation = MagicMock(return_value=nav_cm)
         page.query_selector = AsyncMock(return_value=MagicMock())
         page.url = "https://www.daz3d.com/customer/account/"
         return page
 
-    async def test_successful_login(self):
-        claimer = DazClaimer("user@example.com", "hunter2")
+    async def test_existing_human_authorized_session_is_accepted(self):
+        claimer = DazClaimer("data/daz-auth.json")
         page = self._page_for_login()
 
         await claimer._login(page)
 
         page.goto.assert_awaited_once()
         assert page.goto.await_args.kwargs["wait_until"] == "domcontentloaded"
-        page.expect_navigation.assert_called_once_with(
-            wait_until="domcontentloaded", timeout=claimer._cfg.page_timeout_ms
-        )
-
-    async def test_navigation_timeout_accepts_authenticated_marker(self):
-        claimer = DazClaimer("user@example.com", "hunter2")
-        page = self._page_for_login()
-        nav_cm = page.expect_navigation.return_value
-        nav_cm.__aexit__ = AsyncMock(side_effect=PlaywrightTimeout("timeout"))
-
-        await claimer._login(page)
-
         page.query_selector.assert_awaited_once_with("a[href*='logout']")
 
-    async def test_navigation_timeout_without_authenticated_marker_raises(self):
-        claimer = DazClaimer("user@example.com", "hunter2")
+    async def test_missing_session_requests_visible_human_authorization(self):
+        claimer = DazClaimer("data/daz-auth.json")
         page = self._page_for_login()
         page.query_selector = AsyncMock(return_value=None)
-        nav_cm = page.expect_navigation.return_value
-        nav_cm.__aexit__ = AsyncMock(side_effect=PlaywrightTimeout("timeout"))
 
-        with pytest.raises(ClaimerError, match="submit did not navigate"):
-            await claimer._login(page)
-
-    async def test_login_form_not_found_raises(self):
-        claimer = DazClaimer("user@example.com", "hunter2")
-        page = self._page_for_login()
-        page.locator.return_value.last.wait_for = AsyncMock(
-            side_effect=PlaywrightTimeout("timeout")
-        )
-
-        with pytest.raises(ClaimerError, match="Login form not found"):
+        with pytest.raises(ClaimerError, match="sign-in session is missing or expired"):
             await claimer._login(page)
 
     async def test_still_on_login_page_raises(self):
-        claimer = DazClaimer("user@example.com", "hunter2")
+        claimer = DazClaimer("data/daz-auth.json")
         page = self._page_for_login()
         page.url = "https://www.daz3d.com/customer/account/login/"
 
-        with pytest.raises(ClaimerError, match="Login failed"):
+        with pytest.raises(ClaimerError, match="sign-in session is missing or expired"):
             await claimer._login(page)
-
-    async def test_missing_logged_in_selector_warns_but_does_not_raise(self, caplog):
-        import logging
-
-        claimer = DazClaimer("user@example.com", "hunter2")
-        page = self._page_for_login()
-        page.query_selector = AsyncMock(return_value=None)
-
-        with caplog.at_level(logging.WARNING):
-            await claimer._login(page)
-
-        assert "not found on" in caplog.text
 
 
 class TestAddToCart:
     async def test_goto_timeout_returns_failed(self):
-        claimer = DazClaimer("user@example.com", "hunter2")
+        claimer = DazClaimer("data/daz-auth.json")
         page = MagicMock()
         page.goto = AsyncMock(side_effect=PlaywrightTimeout("timeout"))
 
@@ -269,7 +215,7 @@ class TestAddToCart:
         assert outcome == "failed"
 
     async def test_already_owned_returns_skipped(self):
-        claimer = DazClaimer("user@example.com", "hunter2")
+        claimer = DazClaimer("data/daz-auth.json")
         page = MagicMock()
         page.goto = AsyncMock()
         page.query_selector = AsyncMock(return_value=MagicMock())
@@ -279,7 +225,7 @@ class TestAddToCart:
         assert outcome == "skipped"
 
     async def test_add_to_cart_button_not_found_returns_failed(self):
-        claimer = DazClaimer("user@example.com", "hunter2")
+        claimer = DazClaimer("data/daz-auth.json")
         page = MagicMock()
         page.goto = AsyncMock()
         page.query_selector = AsyncMock(return_value=None)
@@ -290,7 +236,7 @@ class TestAddToCart:
         assert outcome == "failed"
 
     async def test_add_to_cart_button_timeout_returns_failed(self):
-        claimer = DazClaimer("user@example.com", "hunter2")
+        claimer = DazClaimer("data/daz-auth.json")
         page = MagicMock()
         page.goto = AsyncMock()
         page.query_selector = AsyncMock(return_value=None)
@@ -301,7 +247,7 @@ class TestAddToCart:
         assert outcome == "failed"
 
     async def test_successful_add_returns_added(self):
-        claimer = DazClaimer("user@example.com", "hunter2")
+        claimer = DazClaimer("data/daz-auth.json")
         page = MagicMock()
         page.goto = AsyncMock()
         page.query_selector = AsyncMock(return_value=None)
@@ -318,7 +264,7 @@ class TestAddToCart:
 
 class TestCheckout:
     async def test_place_order_button_not_found_returns_false(self):
-        claimer = DazClaimer("user@example.com", "hunter2")
+        claimer = DazClaimer("data/daz-auth.json")
         page = MagicMock()
         page.goto = AsyncMock()
         page.wait_for_selector = AsyncMock(return_value=None)
@@ -326,7 +272,7 @@ class TestCheckout:
         assert await claimer._checkout(page) is False
 
     async def test_success_via_success_element(self):
-        claimer = DazClaimer("user@example.com", "hunter2")
+        claimer = DazClaimer("data/daz-auth.json")
         page = MagicMock()
         page.goto = AsyncMock()
         btn = MagicMock()
@@ -339,7 +285,7 @@ class TestCheckout:
         assert await claimer._checkout(page) is True
 
     async def test_success_via_url_when_no_success_element(self):
-        claimer = DazClaimer("user@example.com", "hunter2")
+        claimer = DazClaimer("data/daz-auth.json")
         page = MagicMock()
         page.goto = AsyncMock()
         btn = MagicMock()
@@ -354,7 +300,7 @@ class TestCheckout:
     async def test_no_confirmation_still_treated_as_success(self, caplog):
         import logging
 
-        claimer = DazClaimer("user@example.com", "hunter2")
+        claimer = DazClaimer("data/daz-auth.json")
         page = MagicMock()
         page.goto = AsyncMock()
         btn = MagicMock()
@@ -371,14 +317,14 @@ class TestCheckout:
         assert "success page not confirmed" in caplog.text
 
     async def test_timeout_returns_false(self):
-        claimer = DazClaimer("user@example.com", "hunter2")
+        claimer = DazClaimer("data/daz-auth.json")
         page = MagicMock()
         page.goto = AsyncMock(side_effect=PlaywrightTimeout("timeout"))
 
         assert await claimer._checkout(page) is False
 
     async def test_unexpected_exception_returns_false(self):
-        claimer = DazClaimer("user@example.com", "hunter2")
+        claimer = DazClaimer("data/daz-auth.json")
         page = MagicMock()
         page.goto = AsyncMock(side_effect=RuntimeError("boom"))
 

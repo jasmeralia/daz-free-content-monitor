@@ -68,17 +68,20 @@ def _get_env_bool(key: str) -> bool:
     return os.environ.get(key, "").lower() in ("1", "true", "yes")
 
 
-def _load_claimer_config() -> tuple[str, str, ClaimerConfig] | None:
-    """Return (email, password, config) if AUTO_CLAIM is enabled with credentials, else None."""
+def _load_claimer_config() -> tuple[str, ClaimerConfig] | None:
+    """Return the saved human-authorized DAZ session path when auto-claim is enabled."""
     if not _get_env_bool("AUTO_CLAIM"):
         return None
-    email = _get_env("DAZ_EMAIL")
-    password = _get_env("DAZ_PASSWORD")
-    if not (email and password):
-        logger.warning("AUTO_CLAIM is enabled but DAZ_EMAIL or DAZ_PASSWORD is not set — disabling")
+    storage_state_path = _get_env("DAZ_STORAGE_STATE", "/app/data/daz-auth.json")
+    if not Path(storage_state_path).is_file():
+        logger.warning(
+            "AUTO_CLAIM is enabled but DAZ sign-in state is missing at %s — disabling; "
+            "authorize with scripts/authorize_daz.py",
+            storage_state_path,
+        )
         return None
-    logger.info("Auto-claim enabled (DAZ_EMAIL=%s)", email)
-    return email, password, ClaimerConfig()
+    logger.info("Auto-claim enabled with saved DAZ sign-in state")
+    return storage_state_path, ClaimerConfig()
 
 
 def _load_scraper_config() -> ScraperConfig:
@@ -236,8 +239,8 @@ def main() -> None:
         async def _cycle() -> int:
             async with DazScraper(scraper_cfg) as scraper:
                 if claimer_cfg is not None:
-                    email, password, cfg = claimer_cfg
-                    async with DazClaimer(email, password, cfg) as claimer:
+                    storage_state_path, cfg = claimer_cfg
+                    async with DazClaimer(storage_state_path, cfg) as claimer:
                         return await run_once(db, scraper, notifier, dry_run, claimer)
                 return await run_once(db, scraper, notifier, dry_run)
 

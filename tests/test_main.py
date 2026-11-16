@@ -97,21 +97,20 @@ class TestLoadClaimerConfig:
         monkeypatch.delenv("AUTO_CLAIM", raising=False)
         assert _load_claimer_config() is None
 
-    def test_enabled_missing_credentials(self, monkeypatch):
+    def test_enabled_missing_session_file(self, monkeypatch, tmp_path):
         monkeypatch.setenv("AUTO_CLAIM", "1")
-        monkeypatch.delenv("DAZ_EMAIL", raising=False)
-        monkeypatch.delenv("DAZ_PASSWORD", raising=False)
+        monkeypatch.setenv("DAZ_STORAGE_STATE", str(tmp_path / "missing.json"))
         assert _load_claimer_config() is None
 
-    def test_enabled_with_credentials(self, monkeypatch):
+    def test_enabled_with_session_file(self, monkeypatch, tmp_path):
+        state_path = tmp_path / "daz-auth.json"
+        state_path.write_text("{}")
         monkeypatch.setenv("AUTO_CLAIM", "1")
-        monkeypatch.setenv("DAZ_EMAIL", "user@example.com")
-        monkeypatch.setenv("DAZ_PASSWORD", "hunter2")
+        monkeypatch.setenv("DAZ_STORAGE_STATE", str(state_path))
         result = _load_claimer_config()
         assert result is not None
-        email, password, cfg = result
-        assert email == "user@example.com"
-        assert password == "hunter2"
+        configured_path, cfg = result
+        assert configured_path == str(state_path)
         assert isinstance(cfg, ClaimerConfig)
 
 
@@ -402,8 +401,9 @@ class TestMain:
         monkeypatch.setenv("LOG_FILE", str(tmp_path / "app.log"))
         monkeypatch.setenv("DB_PATH", str(tmp_path / "app.db"))
         monkeypatch.setenv("AUTO_CLAIM", "1")
-        monkeypatch.setenv("DAZ_EMAIL", "user@example.com")
-        monkeypatch.setenv("DAZ_PASSWORD", "hunter2")
+        state_path = tmp_path / "daz-auth.json"
+        state_path.write_text("{}")
+        monkeypatch.setenv("DAZ_STORAGE_STATE", str(state_path))
 
         root = logging.getLogger()
         original_handlers = list(root.handlers)

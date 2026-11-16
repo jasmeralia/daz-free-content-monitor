@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.19] - 2026-11-16
+
+### Changed
+- `src/claimer.py`: use a human-authorized browser session for auto-claiming.
+  The monitor no longer submits DAZ credentials or attempts automated sign-in;
+  an expired session fails claims cleanly and can be renewed with the visible
+  `scripts/authorize_daz.py` flow.
+- `scripts/authorize_daz.py` and `docs/authorize_daz.md`: add a manual DAZ
+  sign-in flow that saves protected Playwright session state without attempting
+  cart or checkout actions.
+- `scripts/probe_claim.py`: make selector inspection read-only, and remove
+  browser fingerprint overrides from DAZ scraping and probe contexts so the
+  project does not disguise automation to evade DAZ challenges.
+
 ## [0.1.18] - 2026-11-16
 
 ### Fixed
@@ -226,7 +240,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitHub Actions CI: lint on every `master` push; lint + test + Docker build/push on `v*` tags
 - Docker image based on `mcr.microsoft.com/playwright/python:v1.44.0-jammy`
 
-[Unreleased]: https://github.com/jasmeralia/daz-free-content-monitor/compare/v0.1.4...HEAD
+[Unreleased]: https://github.com/jasmeralia/daz-free-content-monitor/compare/v0.1.19...HEAD
+[0.1.19]: https://github.com/jasmeralia/daz-free-content-monitor/compare/v0.1.18...v0.1.19
 [0.1.4]: https://github.com/jasmeralia/daz-free-content-monitor/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/jasmeralia/daz-free-content-monitor/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/jasmeralia/daz-free-content-monitor/compare/v0.1.1...v0.1.2

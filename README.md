@@ -9,7 +9,7 @@ notifications with direct links to new free items.
 - **Playwright scraping** — handles the JS-rendered DAZ store page
 - **SQLite persistence** — deduplicates seen and owned items across restarts
 - **Discord notifications** — one embed per item, batched, with rate-limit handling
-- **Auto-claim** — optional: logs in and adds all new free items to cart, checks out once per cycle
+- **Auto-claim** — optional: uses a saved DAZ session that was authorized by a human, then adds new free items to cart and checks out once per cycle
 - **Dry-run mode** — scrape without writing to the DB or sending notifications
 
 ## Quick Start
@@ -41,30 +41,33 @@ The `docker-compose.yml` already includes the volume mount; create the file at
 | `MAX_RETRIES` | `3` | Scrape retry attempts on failure |
 | `DRY_RUN` | `0` | Set to `1` to scrape without DB writes or notifications |
 | `RUN_ONCE` | `0` | Set to `1` to exit after one check cycle |
-| `AUTO_CLAIM` | `0` | Set to `1` to automatically claim free items (requires credentials below) |
-| `DAZ_EMAIL` | — | DAZ account email (required when `AUTO_CLAIM=1`) |
-| `DAZ_PASSWORD` | — | DAZ account password (required when `AUTO_CLAIM=1`) |
+| `AUTO_CLAIM` | `0` | Set to `1` to automatically claim free items using a saved sign-in session |
+| `DAZ_STORAGE_STATE` | `/app/data/daz-auth.json` | Playwright session file created through the visible human sign-in flow |
 
 ## Auto-Claim
 
-When `AUTO_CLAIM=1` is set, each cycle the monitor logs in to the DAZ store,
-adds all newly-discovered free items to the cart, and completes a single $0
-checkout at the end. Successfully claimed items are marked owned automatically
-so they never trigger repeat notifications. Login navigation waits for the
-page DOM and visible form rather than waiting for background network activity to
-stop.
-
-**Before enabling, validate the CSS selectors against the live site:**
+DAZ now requires a client-side Turnstile/authentication flow that does not
+complete in the monitor's headless browser. Sign in manually through DAZ's
+visible browser flow, including any challenge, and save the resulting session:
 
 ```bash
-docker compose run --rm daz-monitor python scripts/probe_claim.py \
-  --email your@email.com --password yourpassword \
-  --product https://www.daz3d.com/some-free-item
+make venv
+.venv/bin/python -m playwright install chromium
+.venv/bin/python scripts/authorize_daz.py --output data/daz-auth.json
 ```
 
-This saves screenshots to `data/probe_claim/` and reports which selectors in
-`src/claimer.py` matched. Update any that show `NOT FOUND` before enabling
-`AUTO_CLAIM`.
+See [docs/authorize_daz.md](docs/authorize_daz.md) for session-file handling
+and recovery details.
+
+Copy the generated session file to the configured `DAZ_STORAGE_STATE` path on
+the host and keep it private: it contains reusable login cookies. The helper
+only opens the DAZ login page and waits for the logged-in marker; it does not
+fill credentials or click sign-in. The monitor loads that session and reports
+claims as failed if DAZ expires it. Re-run the visible authorization helper
+when that happens. Do not automate or bypass DAZ's challenge.
+
+After the session file is in place, set `AUTO_CLAIM=1`. The monitor saves any
+updated browser session back to the same file at the end of a cycle.
 
 ## Marking Items as Owned Manually
 
@@ -97,11 +100,11 @@ CSS selectors for the DAZ product grid are defined as constants at the top of
 run `scripts/probe_selectors.py` to dump the rendered HTML and identify new
 selectors.
 
-The auto-claim selectors (login, add-to-cart, checkout) live at the top of
-`src/claimer.py` and can be re-validated with `scripts/probe_claim.py`. Login
-selectors target the visible `#account-login-form`, not the hidden header form.
-If DAZ completes sign-in without navigation, the monitor confirms the logged-in
-marker; failed sign-in reports failed claims and keeps the monitor cycle alive.
+The auto-claim selectors (add-to-cart, checkout, authenticated marker) live at
+the top of `src/claimer.py`. Sign-in itself is completed by a human using
+`scripts/authorize_daz.py`; the service never submits credentials or attempts
+to handle Turnstile. An expired session reports failed claims and keeps the
+monitor cycle alive.
 
 ## License
 

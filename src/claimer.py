@@ -5,14 +5,15 @@ Logs in, adds all given free items to the cart one by one, then completes
 a single $0 checkout at the end. Only one checkout is performed regardless
 of how many items are added.
 
-Selector constants are isolated at the top. Run scripts/probe_claim.py
-to dump screenshots and selector matches when DAZ changes their store UI.
+Selector constants are isolated at the top. Run scripts/probe_claim.py to
+inspect selector matches without submitting forms or changing cart contents.
 """
 
 import asyncio
 import logging
 import random
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from playwright.async_api import (
     Browser,
@@ -35,19 +36,11 @@ LOGIN_URL = "https://www.daz3d.com/customer/account/login/"
 CHECKOUT_URL = "https://www.daz3d.com/checkout/onepage/"
 
 # ---------------------------------------------------------------------------
-# CSS selectors — UNVERIFIED placeholders.
-# Run: python scripts/probe_claim.py --email YOU@EXAMPLE.COM --password SECRET
-# to get screenshots and selector matches, then update these constants.
+# CSS selectors. Run scripts/probe_claim.py to inspect matches without
+# submitting forms, adding products, or placing orders.
 # ---------------------------------------------------------------------------
 
-# The account page keeps a hidden account-drop form in the header. Scope these
-# selectors to the visible sign-in form to avoid matching that duplicate.
-LOGIN_EMAIL_SELECTOR = "#account-login-form input#email"
-LOGIN_PASSWORD_SELECTOR = "#account-login-form input#pass"
-LOGIN_SUBMIT_SELECTOR = "#account-login-submit"
-
-# Element present only when authenticated (secondary check after URL-based check)
-# Logout link reliably appears only when logged in
+# Element present only when authenticated.
 LOGGED_IN_SELECTOR = "a[href*='logout']"
 
 # Product page: "Add to Cart" button (absent when item is already owned)
@@ -120,12 +113,10 @@ class DazClaimer:
 
     def __init__(
         self,
-        email: str,
-        password: str,
+        storage_state_path: str,
         config: ClaimerConfig | None = None,
     ) -> None:
-        self._email = email
-        self._password = password
+        self._storage_state_path = Path(storage_state_path)
         self._cfg = config or ClaimerConfig()
         self._playwright: Playwright | None = None
         self._browser: Browser | None = None
@@ -142,24 +133,24 @@ class DazClaimer:
             ],
         )
         self._context = await self._browser.new_context(
-            user_agent=(
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/124.0.0.0 Safari/537.36"
-            ),
             viewport={"width": 1920, "height": 1080},
             locale="en-US",
             timezone_id="America/New_York",
-        )
-        await self._context.add_init_script(
-            "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
+            storage_state=str(self._storage_state_path),
         )
         logger.info("DazClaimer browser context initialized")
         return self
 
     async def __aexit__(self, *args: object) -> None:
         if self._context:
-            await self._context.close()
+            try:
+                await self._context.storage_state(path=str(self._storage_state_path))
+                if self._storage_state_path.exists():
+                    self._storage_state_path.chmod(0o600)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Could not persist DAZ sign-in session: %s", exc)
+            finally:
+                await self._context.close()
         if self._browser:
             await self._browser.close()
         if self._playwright:
@@ -214,60 +205,16 @@ class DazClaimer:
         return result
 
     async def _login(self, page: Page) -> None:
-        logger.info("Logging in to DAZ store as %s", self._email)
+        logger.info("Checking DAZ store sign-in session")
         await page.goto(LOGIN_URL, wait_until="domcontentloaded", timeout=self._cfg.page_timeout_ms)
-
-        try:
-            # .last skips the hidden duplicate login form in the page header — wait_for_selector()
-            # would resolve to that first (hidden) match and never see it become visible
-            await page.locator(LOGIN_EMAIL_SELECTOR).last.wait_for(
-                state="visible", timeout=self._cfg.page_timeout_ms
-            )
-        except PlaywrightTimeout as exc:
+        logged_in = await page.query_selector(LOGGED_IN_SELECTOR)
+        if not logged_in or "/customer/account/login" in page.url:
             raise ClaimerError(
-                f"Login form not found at {LOGIN_URL} — "
-                f"update LOGIN_EMAIL_SELECTOR (current: {LOGIN_EMAIL_SELECTOR!r}). "
-                "Run scripts/probe_claim.py to find the correct selectors."
-            ) from exc
-
-        # Use .last to skip any hidden duplicate fields in the page header
-        await page.locator(LOGIN_EMAIL_SELECTOR).last.fill(self._email)
-        await page.locator(LOGIN_PASSWORD_SELECTOR).last.fill(self._password)
-        try:
-            async with page.expect_navigation(
-                wait_until="domcontentloaded", timeout=self._cfg.page_timeout_ms
-            ):
-                await page.locator(LOGIN_SUBMIT_SELECTOR).last.click()
-        except PlaywrightTimeout as exc:
-            # Some DAZ login responses complete without a document navigation.
-            # Treat the authenticated marker as success; otherwise report a
-            # normal claim failure instead of letting the timeout crash the cycle.
-            logged_in = await page.query_selector(LOGGED_IN_SELECTOR)
-            if not logged_in:
-                raise ClaimerError(
-                    "Login failed — submit did not navigate and the logged-in marker "
-                    f"was not found (url={page.url})."
-                ) from exc
-            logger.info("Login confirmed by authenticated marker without navigation")
-            return
-
-        # Primary check: we should no longer be on the login URL
-        if "/customer/account/login" in page.url:
-            raise ClaimerError(
-                f"Login failed — still on login page after submit (url={page.url}). "
-                "Check DAZ_EMAIL / DAZ_PASSWORD credentials."
+                "DAZ sign-in session is missing or expired. Sign in through the "
+                "visible browser flow with scripts/authorize_daz.py, complete any "
+                "DAZ challenge yourself, then restart the monitor."
             )
-        # Secondary CSS check if LOGGED_IN_SELECTOR is configured
-        if LOGGED_IN_SELECTOR:
-            logged_in = await page.query_selector(LOGGED_IN_SELECTOR)
-            if not logged_in:
-                logger.warning(
-                    "LOGGED_IN_SELECTOR %r not found on %s — "
-                    "update the selector or ignore if login otherwise succeeded",
-                    LOGGED_IN_SELECTOR,
-                    page.url,
-                )
-        logger.info("Login successful (url=%s)", page.url)
+        logger.info("DAZ sign-in session confirmed (url=%s)", page.url)
 
     async def _add_to_cart(self, page: Page, item: FreeItem) -> str:
         """
