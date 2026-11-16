@@ -181,6 +181,10 @@ class TestLogin:
         await claimer._login(page)
 
         page.goto.assert_awaited_once()
+        assert page.goto.await_args.kwargs["wait_until"] == "domcontentloaded"
+        page.expect_navigation.assert_called_once_with(
+            wait_until="domcontentloaded", timeout=claimer._cfg.page_timeout_ms
+        )
 
     async def test_login_form_not_found_raises(self):
         claimer = DazClaimer("user@example.com", "hunter2")

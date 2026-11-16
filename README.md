@@ -50,7 +50,9 @@ The `docker-compose.yml` already includes the volume mount; create the file at
 When `AUTO_CLAIM=1` is set, each cycle the monitor logs in to the DAZ store,
 adds all newly-discovered free items to the cart, and completes a single $0
 checkout at the end. Successfully claimed items are marked owned automatically
-so they never trigger repeat notifications.
+so they never trigger repeat notifications. Login navigation waits for the
+page DOM and visible form rather than waiting for background network activity to
+stop.
 
 **Before enabling, validate the CSS selectors against the live site:**
 

@@ -54,7 +54,8 @@ Discord webhook notifications, Docker Compose deployment on TrueNAS SCALE
 - **Container name**: `ix-daz-monitor-daz-monitor-1`
 - **Data volume**: `/mnt/myzmirror/daz_data/` — contains `daz_monitor.db` and `.env`
 - **Local `.env`**: `.env` in the repo root (gitignored) mirrors the deployed config
-- **Container logs**: indexed in OpenSearch (`container-logs` index, field `container_name`)
+- **Container logs**: indexed in OpenSearch through the `container-logs-write` alias
+  into rollover indices; `container-logs` is a stale pre-rollover index.
 
 ### Useful commands
 
@@ -69,17 +70,19 @@ for r in conn.execute('SELECT title, first_seen, is_active FROM free_items ORDER
 \""
 
 # Search logs via OpenSearch API (on TrueNAS, port 9200)
-curl -s 'http://192.168.1.25:9200/container-logs/_search' \
+curl -s 'http://192.168.1.25:9200/container-logs-write/_search' \
   -H 'Content-Type: application/json' \
   -d '{
     "size": 20,
-    "query": {"match": {"container_name": "ix-daz-monitor-daz-monitor-1"}},
-    "sort": [{"@timestamp": {"order": "desc"}}]
+    "query": {"term": {"container_name.keyword": "ix-daz-monitor-daz-monitor-1"}},
+    "sort": [{"@timestamp": {"order": "desc"}}],
+    "_source": ["@timestamp", "log"]
   }' | python3 -m json.tool
 ```
 
-OpenSearch Dashboards is available at `http://192.168.1.25:5601`.
-Filter by `container_name: ix-daz-monitor-daz-monitor-1` in the `container-logs` index.
+OpenSearch Dashboards is available at `https://opensearch.jasmer.tools/` (LAN only).
+Use Data Explorer Discover and select the container log index pattern; filter by
+`container_name: ix-daz-monitor-daz-monitor-1`.
 
 ## Stack
 
@@ -187,7 +190,7 @@ every CHECK_INTERVAL_SECONDS:
 
   if AUTO_CLAIM and pending:
     claimer.claim_items(pending)
-      → login to DAZ store
+      → load the DAZ login page until DOM content is ready, then wait for the visible login form
       → for each item: navigate to product page → Add to Cart (domcontentloaded)
       → one $0 checkout at the end (domcontentloaded)
     for each successfully claimed item:
@@ -292,6 +295,7 @@ See `docs/mark_owned.md` for full details.
 | Free item disappears before you claim it | Re-notification when item reappears on free list; `owned_skus` suppresses permanently |
 | SQLite corruption on hard shutdown | WAL mode enabled; volume is on TrueNAS ZFS |
 | Auto-claim selectors break after DAZ store update | Claimer selectors in one file (`claimer.py`) — run `probe_claim.py` to identify new ones |
+| DAZ login pages keep background requests active | Login waits for DOM content and the visible form instead of `networkidle` |
 | DAZ flags automated checkout activity | Per-item delays (1.5–3.5s); webdriver flag suppressed; one checkout per cycle |
 | Container base image has an older Python than app dependencies require | Keep the Playwright image's Ubuntu variant on Noble (Python 3.12) and aligned with the Python version used by CI |
 
