@@ -7,7 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.1.19] - 2026-11-16
+## [0.1.61] - 2026-11-16
+
+### Fixed
+- Align the Python fallback version with the next automated patch tag. The
+  release workflow tags every merged master commit, independent of
+  `src/version.py`.
+
+## [0.1.60] - 2026-11-16
 
 ### Changed
 - `src/claimer.py`: use a human-authorized browser session for auto-claiming.
@@ -240,8 +247,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitHub Actions CI: lint on every `master` push; lint + test + Docker build/push on `v*` tags
 - Docker image based on `mcr.microsoft.com/playwright/python:v1.44.0-jammy`
 
-[Unreleased]: https://github.com/jasmeralia/daz-free-content-monitor/compare/v0.1.19...HEAD
-[0.1.19]: https://github.com/jasmeralia/daz-free-content-monitor/compare/v0.1.18...v0.1.19
+[Unreleased]: https://github.com/jasmeralia/daz-free-content-monitor/compare/v0.1.61...HEAD
+[0.1.61]: https://github.com/jasmeralia/daz-free-content-monitor/compare/v0.1.60...v0.1.61
+[0.1.60]: https://github.com/jasmeralia/daz-free-content-monitor/compare/v0.1.59...v0.1.60
 [0.1.4]: https://github.com/jasmeralia/daz-free-content-monitor/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/jasmeralia/daz-free-content-monitor/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/jasmeralia/daz-free-content-monitor/compare/v0.1.1...v0.1.2
