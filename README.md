@@ -100,6 +100,8 @@ selectors.
 The auto-claim selectors (login, add-to-cart, checkout) live at the top of
 `src/claimer.py` and can be re-validated with `scripts/probe_claim.py`. Login
 selectors target the visible `#account-login-form`, not the hidden header form.
+If DAZ completes sign-in without navigation, the monitor confirms the logged-in
+marker; failed sign-in reports failed claims and keeps the monitor cycle alive.
 
 ## License
 
