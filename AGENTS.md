@@ -243,7 +243,8 @@ retried with the `retry_after` delay. Failed batches are retried each poll cycle
 
 ## Dockerfile Notes
 
-- Base: `mcr.microsoft.com/playwright/python:v1.64.0-noble` + `playwright install chromium --with-deps`; the Noble image provides Python 3.12, matching CI and the `pydantic-settings>=2.16.0` dependency.
+- Base: `mcr.microsoft.com/playwright/python:v1.65.0-noble` + `playwright install chromium --with-deps`; the Noble image provides Python 3.12, matching CI and the `pydantic-settings>=2.16.0` dependency.
+- CI passes the release version as the `APP_VERSION` Docker build argument; the image exposes it to the application so startup logs match the published image tag.
 - Run as non-root UID/GID 1000 so the process can read the TrueNAS mode-600
   `.env` file and write to the mounted data directory (both owned by 1000:1000)
 - `data/` directory should be a host mounted volume so SQLite persists across
